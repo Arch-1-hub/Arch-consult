@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: theme("colors.ink.line");
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  @apply bg-ink text-paper-white font-body antialiased;
+}
+
+::selection {
+  background-color: theme("colors.gold.DEFAULT");
+  color: theme("colors.ink.DEFAULT");
+}
+
+/* Visible keyboard focus everywhere, no exceptions */
+:focus-visible {
+  outline: 2px solid theme("colors.gold.DEFAULT");
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.container-arch {
+  @apply mx-auto w-full max-w-content px-6 sm:px-8 lg:px-10;
+}
+
+.eyebrow {
+  @apply text-xs font-medium text-gold tracking-wide2;
+}
+
+.rule {
+  @apply h-px w-full bg-ink-line;
+}
+
+.rule-light {
+  @apply h-px w-full bg-paper-line;
+}
+
+/* Signature arch-line motif, reused across sections as a quiet structural device */
+.arch-mark {
+  stroke: theme("colors.gold.DEFAULT");
+  stroke-width: 1;
+  fill: none;
+}

@@ -1,0 +1,53 @@
+import type { Metadata } from "next";
+import { Fraunces, IBM_Plex_Sans } from "next/font/google";
+import "./globals.css";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  variable: "--font-plex",
+  weight: ["400", "500", "600"],
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  metadataBase: new URL("https://archconsult.com"),
+  title: {
+    default: "Arch Consult — Build a Brand That Means Business.",
+    template: "%s | Arch Consult",
+  },
+  description:
+    "Arch Consult helps businesses turn ideas into strong brands, strategies and scalable businesses — through AI-powered tools and expert consultancy.",
+  openGraph: {
+    title: "Arch Consult — Build a Brand That Means Business.",
+    description:
+      "AI business consulting, brand strategy and digital transformation for businesses ready to scale.",
+    siteName: "Arch Consult",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className={`${fraunces.variable} ${plexSans.variable}`}>
+      <body>
+        <Navbar />
+        <main>{children}</main>
+        <Footer />
+      </body>
+    </html>
+  );
+}
