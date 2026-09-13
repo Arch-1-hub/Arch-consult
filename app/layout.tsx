@@ -36,15 +36,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  let user: { email: string } | null = null;
+
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = createClient();
+    const {
+      data: { user: supabaseUser },
+    } = await supabase.auth.getUser();
+    user = supabaseUser?.email ? { email: supabaseUser.email } : null;
+  }
+
   return (
     <html lang="en" className={`${fraunces.variable} ${plexSans.variable}`}>
       <body>
-        <Navbar />
+        <Navbar user={user} />
         <main>{children}</main>
         <Footer />
       </body>

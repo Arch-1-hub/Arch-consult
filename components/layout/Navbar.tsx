@@ -5,8 +5,9 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import Logo from "./Logo";
 import { primaryNav } from "@/lib/constants";
+import { signOutAction } from "@/lib/actions/auth";
 
-export default function Navbar() {
+export default function Navbar({ user }: { user: { email: string } | null }) {
   const [open, setOpen] = useState(false);
 
   // Close the mobile menu on route change / escape, keep body scrollable state honest
@@ -35,12 +36,31 @@ export default function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <Link
-            href="/login"
-            className="text-sm text-paper-white transition-colors hover:text-gold"
-          >
-            Log in
-          </Link>
+          {user ? (
+            <>
+              <Link
+                href="/account"
+                className="text-sm text-paper-white transition-colors hover:text-gold"
+              >
+                Account
+              </Link>
+              <form action={signOutAction}>
+                <button
+                  type="submit"
+                  className="text-sm text-ash transition-colors hover:text-gold"
+                >
+                  Log out
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm text-paper-white transition-colors hover:text-gold"
+            >
+              Log in
+            </Link>
+          )}
           <Link
             href="/book-consultation"
             className="bg-gold px-5 py-2.5 text-sm font-medium text-ink transition-colors duration-200 ease-arch hover:bg-gold-light"
@@ -74,13 +94,33 @@ export default function Navbar() {
               </Link>
             ))}
             <div className="mt-4 flex flex-col gap-3">
-              <Link
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="border border-ink-line px-5 py-3 text-center text-sm text-paper-white"
-              >
-                Log in
-              </Link>
+              {user ? (
+                <>
+                  <Link
+                    href="/account"
+                    onClick={() => setOpen(false)}
+                    className="border border-ink-line px-5 py-3 text-center text-sm text-paper-white"
+                  >
+                    Account
+                  </Link>
+                  <form action={signOutAction}>
+                    <button
+                      type="submit"
+                      className="w-full py-3 text-center text-sm text-ash"
+                    >
+                      Log out
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <Link
+                  href="/login"
+                  onClick={() => setOpen(false)}
+                  className="border border-ink-line px-5 py-3 text-center text-sm text-paper-white"
+                >
+                  Log in
+                </Link>
+              )}
               <Link
                 href="/book-consultation"
                 onClick={() => setOpen(false)}

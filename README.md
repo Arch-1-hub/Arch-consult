@@ -9,11 +9,17 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 4 — Business Health Check & Launch Wizard
+## Status: Stage 5 — Auth & Database
 
 Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
-the AI Business Consultant. Stage 4 adds two more real, working AI-backed
-features that reuse the same provider pattern (OpenAI or free Groq).
+the AI Business Consultant, Stage 4 the Health Check and Launch Wizard.
+Stage 5 adds real user accounts backed by a real database, using Supabase
+(Postgres + Auth in one service).
+
+**This stage needs setup before it works** — unlike previous stages, there's
+no free-tier shortcut that works with zero configuration. You'll need to
+create a Supabase project (free tier) and run one SQL script. Full steps
+below.
 
 ### A note on honesty (read this)
 
@@ -152,30 +158,86 @@ Until one of these is set, the page still works — it just tells the
 visitor honestly that the AI Consultant isn't configured yet instead of
 pretending to give them a real assessment.
 
+## Setting up accounts (Supabase) — required for this stage to work
+
+1. Go to **supabase.com**, sign up (free), and create a new project. Pick
+   any name/region; save the database password it generates somewhere safe.
+2. Once the project is ready, go to **Project Settings → API**. You'll need
+   two values from this page:
+   - **Project URL** → this is `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon / public key** → this is `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. Go to the **SQL Editor** in the Supabase dashboard → **New query** →
+   paste the entire contents of `supabase/schema.sql` from this project →
+   **Run**. This creates the `profiles` table, sets up row-level security
+   so users can only ever see their own data, and creates a trigger so a
+   profile row is automatically created every time someone signs up.
+4. Add the two environment variables from step 2:
+   - Locally: put them in `.env.local`
+   - On Vercel: Project → Settings → Environment Variables → add both →
+     redeploy
+5. That's it — registration, login, password reset, and the account page
+   should all work end to end.
+
+**To make your own account an admin later** (needed for the future admin
+dashboard stage): sign up normally through the site, then in Supabase's
+**Table Editor → profiles**, find your row and change `role` from `client`
+to `admin` — or run the SQL comment at the bottom of `schema.sql` with your
+user ID.
+
+## What's new in this stage
+
+- **Register** (`/register`) — real sign-up via Supabase Auth (email +
+  password + name + optional business name). Supabase sends a confirmation
+  email before the account is fully active (Supabase's default,
+  configurable in their dashboard if you'd rather skip it).
+- **Login** (`/login`) — real sign-in, redirects back to wherever the user
+  was trying to go (e.g. if middleware redirected them from `/account`).
+- **Password reset** (`/reset-password` → emailed link → `/update-password`)
+  — full real flow via Supabase Auth. The reset request always returns the
+  same message whether or not the email exists, so the site can't be used
+  to check who has an account.
+- **Account page** (`/account`) — protected route (middleware redirects to
+  `/login` if not signed in); lets a user update their name and business
+  name, backed by the real `profiles` table.
+- **Navbar** now reflects real session state — shows "Log in" or
+  "Account" + "Log out" depending on whether someone is actually signed in
+  (fetched server-side in `app/layout.tsx`, not just a UI toggle).
+- **`middleware.ts`** refreshes the Supabase session on every request and
+  protects `/account` (and is where future protected routes like
+  `/dashboard` and `/admin` get added — just extend `PROTECTED_PREFIXES`).
+- **`profiles` table + RLS** (`supabase/schema.sql`) — the actual database
+  schema, with row-level security so a user can never read or write
+  another user's profile, even if they tried to manipulate a request
+  directly. This is the foundation later stages (dashboard, admin) will
+  build their own tables on top of.
+- If Supabase isn't configured, every auth page and the account page shows
+  an honest "not configured yet" message rather than crashing or faking
+  success — same pattern as the AI features.
+
 ## What's intentionally not built yet
 
-Every link to `/book-consultation`, `/login` currently points to a route
-that doesn't exist yet — that's expected at this stage, not a bug. They'll
-404 until built in the next stages, in this order:
+Every link to `/book-consultation` currently points to a route that doesn't
+exist yet — that's expected at this stage, not a bug. `/login` is now real.
+The rest will 404 until built in the next stages, in this order:
 
-1. Auth: register/login/reset, session handling
-2. AI Tools suite (Brand Name Generator, SWOT, etc. as standalone tools)
-3. Booking system
-4. Client dashboard (projects, reports, bookings, payments, documents,
+1. AI Tools suite (Brand Name Generator, SWOT, etc. as standalone tools)
+2. Booking system
+3. Client dashboard (projects, reports, bookings, payments, documents,
    messages) — including saving Health Check / Launch Wizard / AI
-   Consultant reports to an account, which needs auth + database first
-5. Admin dashboard (including making `pricingPackages` admin-editable
-   instead of hard-coded)
-6. Flutterwave payment integration (server-side verified)
-7. Database wiring (Postgres/Supabase) replacing in-file demo data
-8. Final QA pass: full route check, mobile pass, error/loading/empty
+   Consultant reports to an account, now that auth + database exist
+4. Admin dashboard (including making `pricingPackages` admin-editable
+   instead of hard-coded, and using the `role` column already in `profiles`)
+5. Flutterwave payment integration (server-side verified)
+6. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 
 ## Environment variables
 
-See `.env.example`. Nothing in this stage requires real secrets yet — the
-file exists now so the shape of configuration is stable as later stages
-start consuming it. Never commit `.env.local`.
+See `.env.example`. As of this stage, `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` are required for accounts to work (see
+setup steps above). `OPENAI_API_KEY` or `GROQ_API_KEY` are required for the
+AI features. Everything else is still for later stages. Never commit
+`.env.local`.
 
 ## Project structure
 
