@@ -9,15 +9,13 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 2 — Static content pages
+## Status: Stage 3 — AI Business Consultant
 
-Stage 1 delivered the foundation: scaffold, design system, navigation/footer,
-homepage. Stage 2 adds the full static content pages: About, Services
-(listing + 8 detail pages), Pricing, Contact (with a real working form and
-API route), and Blog (listing + 6 full articles). It's built so later stages
-(AI Consultant, Business Health Check, Launch Wizard, client dashboard,
-admin dashboard, booking, Flutterwave payments) plug in without reworking
-this layer.
+Stage 1 delivered the foundation, Stage 2 added the static content pages.
+Stage 3 adds the first real backend-powered feature: the AI Business
+Consultant. It's a genuine, working feature — not a mockup — that produces
+real assessments once an OpenAI key is configured, and degrades honestly
+(not fake success) when it isn't.
 
 ### A note on honesty (read this)
 
@@ -91,31 +89,55 @@ npm run lint
 - **Blog** (`/blog` + `/blog/[slug]`) — 6 full placeholder articles across
   the categories from the brief (Branding, Business Strategy, Marketing,
   Entrepreneurship, AI, African Business), statically generated per post.
+- **AI Business Consultant** (`/ai-consultant`) — a structured intake form
+  (industry, business stage, target customers, challenges, goals, current
+  brand/marketing situation, budget/stage) posts to a real server-side API
+  route (`app/api/ai-consultant/route.ts`) that calls OpenAI with a strict
+  system prompt and returns a structured JSON assessment: business
+  assessment, branding assessment, key problems, opportunities, recommended
+  actions, suggested Arch Consult services (matched to real service pages),
+  and next steps. Includes input validation, sanitization, and rate
+  limiting (8 requests/hour per IP — AI calls cost real money). **If
+  `OPENAI_API_KEY` isn't set, it does not fake a result** — it returns a
+  clear message saying the AI Consultant isn't configured yet and points
+  the visitor to book a human consultation instead.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
   service and blog route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
   respected, semantic landmarks, real form labels.
 
+## Turning the AI Consultant on
+
+It's fully built but needs one thing to produce real output:
+
+1. Get an API key from platform.openai.com
+2. In Vercel: Project → Settings → Environment Variables → add
+   `OPENAI_API_KEY` with that value → redeploy
+3. Locally: put it in `.env.local` as `OPENAI_API_KEY=sk-...`
+
+Until that's set, the page still works — it just tells the visitor honestly
+that the AI Consultant isn't configured yet instead of pretending to give
+them a real assessment.
+
 ## What's intentionally not built yet
 
-Every link to `/ai-consultant`, `/health-check`, `/launch-wizard`,
-`/book-consultation`, `/login` currently points to a route that doesn't
-exist yet — that's expected at this stage, not a bug. They'll 404 until
-built in the next stages, in this order:
+Every link to `/health-check`, `/launch-wizard`, `/book-consultation`,
+`/login` currently points to a route that doesn't exist yet — that's
+expected at this stage, not a bug. They'll 404 until built in the next
+stages, in this order:
 
 1. Auth: register/login/reset, session handling
-2. AI Consultant (OpenAI, server-side only)
-3. Business Health Check + Business Launch Wizard
-4. AI Tools suite
-5. Booking system
-6. Client dashboard (projects, reports, bookings, payments, documents,
+2. Business Health Check + Business Launch Wizard
+3. AI Tools suite (Brand Name Generator, SWOT, etc.)
+4. Booking system
+5. Client dashboard (projects, reports, bookings, payments, documents,
    messages)
-7. Admin dashboard (including making `pricingPackages` admin-editable
+6. Admin dashboard (including making `pricingPackages` admin-editable
    instead of hard-coded)
-8. Flutterwave payment integration (server-side verified)
-9. Database wiring (Postgres/Supabase) replacing in-file demo data
-10. Final QA pass: full route check, mobile pass, error/loading/empty
-    states, accessibility pass
+7. Flutterwave payment integration (server-side verified)
+8. Database wiring (Postgres/Supabase) replacing in-file demo data
+9. Final QA pass: full route check, mobile pass, error/loading/empty
+   states, accessibility pass
 
 ## Environment variables
 
