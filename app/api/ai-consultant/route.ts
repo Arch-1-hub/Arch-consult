@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   const provider = openaiKey
     ? { apiKey: openaiKey, baseUrl: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" }
     : groqKey
-    ? { apiKey: groqKey, baseUrl: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" }
+    ? { apiKey: groqKey, baseUrl: "https://api.groq.com/openai/v1/chat/completions", model: "openai/gpt-oss-120b" }
     : null;
 
   if (!provider) {
