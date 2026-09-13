@@ -108,16 +108,27 @@ npm run lint
 
 ## Turning the AI Consultant on
 
-It's fully built but needs one thing to produce real output:
+It's fully built but needs one thing to produce real output. Two options:
 
-1. Get an API key from platform.openai.com
-2. In Vercel: Project → Settings → Environment Variables → add
-   `OPENAI_API_KEY` with that value → redeploy
-3. Locally: put it in `.env.local` as `OPENAI_API_KEY=sk-...`
+**Free, for testing:** get a free API key (no credit card) at
+console.groq.com/keys, then set `GROQ_API_KEY` instead of `OPENAI_API_KEY`.
+The code supports both — Groq's API is OpenAI-compatible, so no code
+changes are needed. Groq's free tier is rate-limited (30 requests/minute,
+~14,400/day) but plenty for testing the feature end to end before paying
+for anything.
 
-Until that's set, the page still works — it just tells the visitor honestly
-that the AI Consultant isn't configured yet instead of pretending to give
-them a real assessment.
+**For production:** get an API key from platform.openai.com and set
+`OPENAI_API_KEY` — it's preferred over Groq if both are set, and gives
+generally stronger output quality.
+
+Either way:
+1. In Vercel: Project → Settings → Environment Variables → add the key →
+   redeploy
+2. Locally: put it in `.env.local`
+
+Until one of these is set, the page still works — it just tells the
+visitor honestly that the AI Consultant isn't configured yet instead of
+pretending to give them a real assessment.
 
 ## What's intentionally not built yet
 

@@ -107,15 +107,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Supports either OpenAI or Groq (Groq has a genuinely free tier and uses
+  // an OpenAI-compatible API, so the same request shape works for both —
+  // useful for testing before paying for OpenAI usage). OpenAI is preferred
+  // if both are set.
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
 
-  if (!apiKey) {
+  const provider = openaiKey
+    ? { apiKey: openaiKey, baseUrl: "https://api.openai.com/v1/chat/completions", model: "gpt-4o-mini" }
+    : groqKey
+    ? { apiKey: groqKey, baseUrl: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" }
+    : null;
+
+  if (!provider) {
     // Graceful setup message, per spec — never fake a result when the
     // credential to produce a real one isn't configured.
     return NextResponse.json(
       {
         error:
-          "The AI Consultant isn't fully configured in this environment yet — an OPENAI_API_KEY needs to be added. Once that's set, this page will generate a real assessment. In the meantime, you can book a consultation with a human consultant directly.",
+          "The AI Consultant isn't fully configured in this environment yet — an OPENAI_API_KEY or GROQ_API_KEY needs to be added. Once that's set, this page will generate a real assessment. In the meantime, you can book a consultation with a human consultant directly.",
         setupRequired: true,
       },
       { status: 503 }
@@ -147,14 +158,14 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   try {
-    const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    const aiRes = await fetch(provider.baseUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${provider.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: provider.model,
         response_format: { type: "json_object" },
         temperature: 0.6,
         messages: [
@@ -166,7 +177,7 @@ export async function POST(req: NextRequest) {
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
-      console.error("[ai-consultant] OpenAI API error:", errText);
+      console.error("[ai-consultant] AI provider error:", errText);
       return NextResponse.json(
         { error: "The AI Consultant couldn't complete your assessment right now. Please try again shortly." },
         { status: 502 }
