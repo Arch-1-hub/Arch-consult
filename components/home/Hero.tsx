@@ -31,11 +31,10 @@ export default function Hero() {
             </Button>
           </div>
 
-          <dl className="mt-14 grid max-w-md grid-cols-3 gap-6 border-t border-ink-line pt-8">
-            <Stat value="120+" label="Businesses advised" />
-            <Stat value="34" label="Industries served" />
-            <Stat value="4.9/5" label="Client rating" />
-          </dl>
+          <div className="mt-14 flex items-center gap-3 border-t border-ink-line pt-8 text-xs text-ash">
+            <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+            Founder-led · Nigeria · Remote worldwide
+          </div>
         </div>
 
         <div className="relative hidden items-center justify-center lg:flex">
@@ -51,15 +50,6 @@ export default function Hero() {
         </div>
       </div>
     </section>
-  );
-}
-
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div>
-      <dt className="font-display text-2xl text-paper-white">{value}</dt>
-      <dd className="mt-1 text-xs text-ash">{label}</dd>
-    </div>
   );
 }
 

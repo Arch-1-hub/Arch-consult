@@ -6,7 +6,7 @@ import WhyChooseUs from "@/components/home/WhyChooseUs";
 import HealthCheckCTA from "@/components/home/HealthCheckCTA";
 import AIConsultantCTA from "@/components/home/AIConsultantCTA";
 import Testimonials from "@/components/home/Testimonials";
-import CaseStudies from "@/components/home/CaseStudies";
+import FounderSection from "@/components/home/FounderSection";
 import InsightsPreview from "@/components/home/InsightsPreview";
 import FinalCTA from "@/components/home/FinalCTA";
 
@@ -26,7 +26,7 @@ export default function HomePage() {
       <HealthCheckCTA />
       <AIConsultantCTA />
       <Testimonials />
-      <CaseStudies />
+      <FounderSection />
       <InsightsPreview />
       <FinalCTA />
     </>

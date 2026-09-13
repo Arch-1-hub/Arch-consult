@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { services } from "@/lib/constants";
+import { services, blogPosts } from "@/lib/constants";
 
 const base = "https://archconsult.com";
 
@@ -25,5 +25,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: new Date(),
   }));
 
-  return [...staticRoutes, ...serviceRoutes];
+  const blogRoutes = blogPosts.map((post) => ({
+    url: `${base}/blog/${post.slug}`,
+    lastModified: new Date(post.date),
+  }));
+
+  return [...staticRoutes, ...serviceRoutes, ...blogRoutes];
 }

@@ -3,13 +3,38 @@
 Premium AI-powered business consultancy platform. Next.js 14 (App Router) +
 TypeScript + Tailwind CSS.
 
-## Status: Stage 1 — Foundation
+Arch Consult is a real, founder-led, early-stage consultancy
+(Blessed Otamekhoraye, Founder & Branding Consultant — Nigeria · Remote
+worldwide). Because of that, this codebase deliberately avoids fabricated
+stats, testimonials, clients, or case studies anywhere in the UI — see
+"A note on honesty" below.
 
-This stage delivers the production-grade foundation: project scaffold, design
-system, global navigation/footer, and the full homepage. It is built so every
-later stage (AI Consultant, Business Health Check, Launch Wizard, client
-dashboard, admin dashboard, booking, Flutterwave payments) plugs in without
-reworking this layer.
+## Status: Stage 2 — Static content pages
+
+Stage 1 delivered the foundation: scaffold, design system, navigation/footer,
+homepage. Stage 2 adds the full static content pages: About, Services
+(listing + 8 detail pages), Pricing, Contact (with a real working form and
+API route), and Blog (listing + 6 full articles). It's built so later stages
+(AI Consultant, Business Health Check, Launch Wizard, client dashboard,
+admin dashboard, booking, Flutterwave payments) plug in without reworking
+this layer.
+
+### A note on honesty (read this)
+
+Arch Consult is early-stage. Per explicit instruction, this build never
+fabricates:
+- Client counts, ratings, or "businesses advised" style stats
+- Testimonials — `lib/constants.ts` has an intentionally empty
+  `testimonials` array; `components/home/Testimonials.tsx` renders an honest
+  "coming soon" state until real ones are added
+- Case studies or named clients — there is no case-studies section
+- Certifications, awards, or credentials for the founder
+- Final pricing — every price in `pricingPackages` is explicitly labeled
+  "Placeholder" in the UI, not a real number
+
+When adding real content later, only the following need editing:
+`lib/constants.ts` (`testimonials`, `pricingPackages` prices, `founder` bio)
+— no component logic needs to change.
 
 **Important — read this before running anything:** this codebase was written
 in an offline sandbox with no access to the npm registry, so the
@@ -49,36 +74,47 @@ npm run lint
 - Global footer (`components/layout/Footer.tsx`).
 - Full homepage (`app/page.tsx`) — hero, services overview, how it works,
   why Arch Consult, Business Health Check CTA, AI Consultant CTA,
-  testimonials, case studies, insights preview, final CTA.
-- Base SEO: metadata, Open Graph tags, `sitemap.ts`, `robots.ts`.
+  testimonials (honest empty state), founder section, insights preview,
+  final CTA.
+- **About** (`/about`) — mission, four-pillar approach, founder profile.
+- **Services** (`/services` + `/services/[slug]`) — all 8 services with
+  what-it-is / who-it's-for / problems-it-solves / deliverables, statically
+  generated per service.
+- **Pricing** (`/pricing`) — Starter / Growth / Strategic / Custom Enterprise,
+  every price explicitly marked as a placeholder in the UI itself.
+- **Contact** (`/contact`) — a real client-side form posting to a real
+  server-side API route (`app/api/contact/route.ts`) with validation,
+  sanitization, and basic in-memory rate limiting. If `RESEND_API_KEY` is
+  set, it sends a real email via Resend; if not, it logs the submission
+  server-side and tells the user honestly that email delivery isn't
+  configured yet — it never fakes a "sent" confirmation.
+- **Blog** (`/blog` + `/blog/[slug]`) — 6 full placeholder articles across
+  the categories from the brief (Branding, Business Strategy, Marketing,
+  Entrepreneurship, AI, African Business), statically generated per post.
+- Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
+  service and blog route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
-  respected, semantic landmarks.
-
-All copy, testimonials, case studies and blog previews in
-`lib/constants.ts` are placeholder content clearly isolated in one file so
-it's easy to replace with real client data later.
+  respected, semantic landmarks, real form labels.
 
 ## What's intentionally not built yet
 
-Every link in the navigation to `/services`, `/ai-consultant`,
-`/health-check`, `/launch-wizard`, `/pricing`, `/blog`, `/book-consultation`,
-`/login`, `/about`, `/contact` currently points to a route that doesn't
+Every link to `/ai-consultant`, `/health-check`, `/launch-wizard`,
+`/book-consultation`, `/login` currently points to a route that doesn't
 exist yet — that's expected at this stage, not a bug. They'll 404 until
 built in the next stages, in this order:
 
-1. Static pages: About, Services (+ detail pages), Pricing, Contact, Blog
-2. Auth: register/login/reset, session handling
-3. AI Consultant (OpenAI, server-side only)
-4. Business Health Check + Business Launch Wizard
-5. AI Tools suite
-6. Booking system
-7. Client dashboard (projects, reports, bookings, payments, documents,
+1. Auth: register/login/reset, session handling
+2. AI Consultant (OpenAI, server-side only)
+3. Business Health Check + Business Launch Wizard
+4. AI Tools suite
+5. Booking system
+6. Client dashboard (projects, reports, bookings, payments, documents,
    messages)
-8. Admin dashboard
-9. Flutterwave payment integration (server-side verified)
-10. Database wiring (Postgres/Supabase) replacing in-file demo data
-11. Transactional email
-12. Final QA pass: full route check, mobile pass, error/loading/empty
+7. Admin dashboard (including making `pricingPackages` admin-editable
+   instead of hard-coded)
+8. Flutterwave payment integration (server-side verified)
+9. Database wiring (Postgres/Supabase) replacing in-file demo data
+10. Final QA pass: full route check, mobile pass, error/loading/empty
     states, accessibility pass
 
 ## Environment variables

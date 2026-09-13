@@ -41,7 +41,7 @@ export default function Footer() {
 
       <div className="container-arch flex flex-col gap-3 py-6 text-xs text-ash sm:flex-row sm:items-center sm:justify-between">
         <p>© {new Date().getFullYear()} Arch Consult. All rights reserved.</p>
-        <p>Lagos · Remote worldwide</p>
+        <p>{site.location}</p>
       </div>
     </footer>
   );
