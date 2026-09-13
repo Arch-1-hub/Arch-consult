@@ -15,7 +15,7 @@ const company = [
 
 export default function Footer() {
   return (
-    <footer className="border-t border-ink-line bg-ink">
+    <footer className="border-t border-ink-line bg-ink print:hidden">
       <div className="container-arch grid gap-12 py-16 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Logo />

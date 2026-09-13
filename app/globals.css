@@ -64,3 +64,13 @@ body {
   stroke-width: 1;
   fill: none;
 }
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+}

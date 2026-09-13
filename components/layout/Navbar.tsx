@@ -18,7 +18,7 @@ export default function Navbar() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-ink-line bg-ink/95 backdrop-blur supports-[backdrop-filter]:bg-ink/80">
+    <header className="sticky top-0 z-50 border-b border-ink-line bg-ink/95 backdrop-blur supports-[backdrop-filter]:bg-ink/80 print:hidden">
       <div className="container-arch flex h-16 items-center justify-between">
         <Logo />
 

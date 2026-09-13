@@ -9,13 +9,11 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 3 — AI Business Consultant
+## Status: Stage 4 — Business Health Check & Launch Wizard
 
-Stage 1 delivered the foundation, Stage 2 added the static content pages.
-Stage 3 adds the first real backend-powered feature: the AI Business
-Consultant. It's a genuine, working feature — not a mockup — that produces
-real assessments once an OpenAI key is configured, and degrades honestly
-(not fake success) when it isn't.
+Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
+the AI Business Consultant. Stage 4 adds two more real, working AI-backed
+features that reuse the same provider pattern (OpenAI or free Groq).
 
 ### A note on honesty (read this)
 
@@ -101,6 +99,30 @@ npm run lint
   `OPENAI_API_KEY` isn't set, it does not fake a result** — it returns a
   clear message saying the AI Consultant isn't configured yet and points
   the visitor to book a human consultation instead.
+- **Business Health Check** (`/health-check`) — a 10-step wizard: business
+  stage, industry, target customer, revenue model, main challenges, growth
+  goals (context), plus 7 scored questions covering Branding, Marketing,
+  Positioning, Customer Acquisition, Digital Presence, Operations, and
+  Growth Readiness. **Scores are computed client-side from the answers,
+  deterministically** (`lib/health-check-data.ts`) — they're always real,
+  even if the AI text generation step fails or isn't configured. AI
+  (OpenAI/Groq) then generates a written summary, per-category insights,
+  and recommendations from those scores plus context. Includes a
+  print-to-PDF "Save as PDF" button (uses the browser's native print, no
+  extra dependency) that hides nav/footer and switches to a light printable
+  layout.
+- **Business Launch Wizard** (`/launch-wizard`) — a 5-step wizard covering
+  business idea, industry, location, target customers, problem/solution,
+  product/service, pricing, competitors, goals, and resources. Generates a
+  full structured launch plan: concept summary, target audience, value
+  proposition, positioning, brand personality, brand naming suggestions,
+  revenue model, marketing strategy, customer acquisition strategy, launch
+  roadmap, SWOT analysis, and a 30/60/90-day action plan — plus matched
+  Arch Consult services. Also has "Save as PDF".
+- Shared wizard infrastructure (`components/shared/WizardShell.tsx`,
+  `WizardFields.tsx`) — reused by both features, keeps step/progress UI and
+  form field styling consistent, and makes future multi-step features
+  (e.g. onboarding) cheap to add.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
   service and blog route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
@@ -132,22 +154,21 @@ pretending to give them a real assessment.
 
 ## What's intentionally not built yet
 
-Every link to `/health-check`, `/launch-wizard`, `/book-consultation`,
-`/login` currently points to a route that doesn't exist yet — that's
-expected at this stage, not a bug. They'll 404 until built in the next
-stages, in this order:
+Every link to `/book-consultation`, `/login` currently points to a route
+that doesn't exist yet — that's expected at this stage, not a bug. They'll
+404 until built in the next stages, in this order:
 
 1. Auth: register/login/reset, session handling
-2. Business Health Check + Business Launch Wizard
-3. AI Tools suite (Brand Name Generator, SWOT, etc.)
-4. Booking system
-5. Client dashboard (projects, reports, bookings, payments, documents,
-   messages)
-6. Admin dashboard (including making `pricingPackages` admin-editable
+2. AI Tools suite (Brand Name Generator, SWOT, etc. as standalone tools)
+3. Booking system
+4. Client dashboard (projects, reports, bookings, payments, documents,
+   messages) — including saving Health Check / Launch Wizard / AI
+   Consultant reports to an account, which needs auth + database first
+5. Admin dashboard (including making `pricingPackages` admin-editable
    instead of hard-coded)
-7. Flutterwave payment integration (server-side verified)
-8. Database wiring (Postgres/Supabase) replacing in-file demo data
-9. Final QA pass: full route check, mobile pass, error/loading/empty
+6. Flutterwave payment integration (server-side verified)
+7. Database wiring (Postgres/Supabase) replacing in-file demo data
+8. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 
 ## Environment variables
