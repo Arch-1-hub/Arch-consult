@@ -396,3 +396,29 @@ export const insightsPreview = blogPosts.slice(0, 3).map((post) => ({
   title: post.title,
   excerpt: post.excerpt,
 }));
+
+// --- Booking ---
+export const consultationTypes = [
+  "General Strategy Consultation",
+  "Brand Strategy & Identity",
+  "Business Growth Strategy",
+  "Digital Strategy",
+  "AI & Business Automation",
+  "Marketing Strategy",
+  "Entrepreneurial Advisory",
+  "Not sure yet — help me figure it out",
+];
+
+// Fixed slots for now, since there's no live calendar/availability system
+// yet. Structured so a real calendar integration can slot in later without
+// changing the booking form or database shape.
+export const bookingTimeSlots = [
+  "9:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "12:00 PM",
+  "1:00 PM",
+  "2:00 PM",
+  "3:00 PM",
+  "4:00 PM",
+];

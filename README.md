@@ -9,17 +9,14 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 5 — Auth & Database
+## Status: Stage 6 — Booking System
 
 Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
-the AI Business Consultant, Stage 4 the Health Check and Launch Wizard.
-Stage 5 adds real user accounts backed by a real database, using Supabase
-(Postgres + Auth in one service).
+the AI Business Consultant, Stage 4 the Health Check and Launch Wizard,
+Stage 5 real accounts and a database. Stage 6 adds a real, working booking
+system on top of that database.
 
-**This stage needs setup before it works** — unlike previous stages, there's
-no free-tier shortcut that works with zero configuration. You'll need to
-create a Supabase project (free tier) and run one SQL script. Full steps
-below.
+**One more small SQL step needed** — see below.
 
 ### A note on honesty (read this)
 
@@ -129,6 +126,12 @@ npm run lint
   `WizardFields.tsx`) — reused by both features, keeps step/progress UI and
   form field styling consistent, and makes future multi-step features
   (e.g. onboarding) cheap to add.
+- **Accounts** (`/register`, `/login`, `/reset-password`,
+  `/update-password`, `/account`) — real sign-up/sign-in/password-reset via
+  Supabase Auth, a protected account page (`middleware.ts` redirects
+  signed-out visitors to `/login`), and a `profiles` table with row-level
+  security so a user can only ever read/write their own row. Navbar
+  reflects real session state, fetched server-side.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
   service and blog route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
@@ -158,77 +161,74 @@ Until one of these is set, the page still works — it just tells the
 visitor honestly that the AI Consultant isn't configured yet instead of
 pretending to give them a real assessment.
 
-## Setting up accounts (Supabase) — required for this stage to work
+## Setting up accounts (Supabase) — required for auth to work
 
-1. Go to **supabase.com**, sign up (free), and create a new project. Pick
-   any name/region; save the database password it generates somewhere safe.
-2. Once the project is ready, go to **Project Settings → API**. You'll need
-   two values from this page:
-   - **Project URL** → this is `NEXT_PUBLIC_SUPABASE_URL`
-   - **anon / public key** → this is `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-3. Go to the **SQL Editor** in the Supabase dashboard → **New query** →
-   paste the entire contents of `supabase/schema.sql` from this project →
-   **Run**. This creates the `profiles` table, sets up row-level security
-   so users can only ever see their own data, and creates a trigger so a
-   profile row is automatically created every time someone signs up.
-4. Add the two environment variables from step 2:
-   - Locally: put them in `.env.local`
-   - On Vercel: Project → Settings → Environment Variables → add both →
-     redeploy
-5. That's it — registration, login, password reset, and the account page
-   should all work end to end.
+1. Go to **supabase.com**, sign up (free), and create a new project.
+2. Go to **Project Settings → API**. You'll need two values:
+   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon / public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+3. **SQL Editor → New query** → paste the entire contents of
+   `supabase/schema.sql` → **Run**. Creates the `profiles` table, RLS, and
+   the auto-create-profile-on-signup trigger.
+4. Add both env vars (locally in `.env.local`, on Vercel in Settings →
+   Environment Variables → redeploy).
+5. Also set `NEXT_PUBLIC_SITE_URL` to your real deployed URL (not
+   `localhost`) — Supabase uses this to build confirmation/reset email
+   links, and email links will silently point at the wrong place if this
+   is left as the local default.
 
-**To make your own account an admin later** (needed for the future admin
-dashboard stage): sign up normally through the site, then in Supabase's
-**Table Editor → profiles**, find your row and change `role` from `client`
-to `admin` — or run the SQL comment at the bottom of `schema.sql` with your
-user ID.
+**To make your own account an admin later**: sign up normally, then in
+Supabase's **Table Editor → profiles**, change your row's `role` from
+`client` to `admin`.
+
+## Adding the bookings table (required for this stage)
+
+You already have a Supabase project from Stage 5. One more script to run:
+
+1. Supabase → your project → **SQL Editor → New query**
+2. Paste the entire contents of `supabase/002_bookings.sql`
+3. Run it — creates the `bookings` table with row-level security (anyone
+   can submit a booking; only the logged-in user who made it, if any, can
+   read it back — this is what the future client dashboard will use)
+
+No new environment variables needed — it uses the same Supabase connection
+from Stage 5.
 
 ## What's new in this stage
 
-- **Register** (`/register`) — real sign-up via Supabase Auth (email +
-  password + name + optional business name). Supabase sends a confirmation
-  email before the account is fully active (Supabase's default,
-  configurable in their dashboard if you'd rather skip it).
-- **Login** (`/login`) — real sign-in, redirects back to wherever the user
-  was trying to go (e.g. if middleware redirected them from `/account`).
-- **Password reset** (`/reset-password` → emailed link → `/update-password`)
-  — full real flow via Supabase Auth. The reset request always returns the
-  same message whether or not the email exists, so the site can't be used
-  to check who has an account.
-- **Account page** (`/account`) — protected route (middleware redirects to
-  `/login` if not signed in); lets a user update their name and business
-  name, backed by the real `profiles` table.
-- **Navbar** now reflects real session state — shows "Log in" or
-  "Account" + "Log out" depending on whether someone is actually signed in
-  (fetched server-side in `app/layout.tsx`, not just a UI toggle).
-- **`middleware.ts`** refreshes the Supabase session on every request and
-  protects `/account` (and is where future protected routes like
-  `/dashboard` and `/admin` get added — just extend `PROTECTED_PREFIXES`).
-- **`profiles` table + RLS** (`supabase/schema.sql`) — the actual database
-  schema, with row-level security so a user can never read or write
-  another user's profile, even if they tried to manipulate a request
-  directly. This is the foundation later stages (dashboard, admin) will
-  build their own tables on top of.
-- If Supabase isn't configured, every auth page and the account page shows
-  an honest "not configured yet" message rather than crashing or faking
-  success — same pattern as the AI features.
+- **Book a Consultation** (`/book-consultation`) — a real form: consultation
+  type, preferred date/time (fixed slots for now — see note below), name,
+  email, phone, business name, and what to cover. Posts to a real API
+  route (`app/api/bookings/route.ts`) with validation, sanitization, and
+  rate limiting, then inserts into the real `bookings` table. If the
+  visitor is logged in, their booking is automatically linked to their
+  account (`user_id`) for the future client dashboard to show. Guests can
+  book without an account.
+- Shows a real confirmation screen summarizing what was submitted — no
+  fake "email sent" claims, since email delivery isn't wired up yet
+  (same honesty pattern as the contact form).
+- **Fixed time slots, not a live calendar** — per the original spec,
+  this is deliberately structured so a real calendar/availability
+  integration (Google Calendar, Cal.com, etc.) can be swapped in later
+  without changing the form, API route, or database shape — only the
+  slot-generation logic would need to change.
+- If Supabase isn't configured, the booking still gets logged
+  server-side and the visitor gets an honest message rather than a fake
+  confirmation.
 
 ## What's intentionally not built yet
 
-Every link to `/book-consultation` currently points to a route that doesn't
-exist yet — that's expected at this stage, not a bug. `/login` is now real.
-The rest will 404 until built in the next stages, in this order:
+Everything now works, but the roadmap continues:
 
 1. AI Tools suite (Brand Name Generator, SWOT, etc. as standalone tools)
-2. Booking system
-3. Client dashboard (projects, reports, bookings, payments, documents,
-   messages) — including saving Health Check / Launch Wizard / AI
-   Consultant reports to an account, now that auth + database exist
-4. Admin dashboard (including making `pricingPackages` admin-editable
-   instead of hard-coded, and using the `role` column already in `profiles`)
-5. Flutterwave payment integration (server-side verified)
-6. Final QA pass: full route check, mobile pass, error/loading/empty
+2. Client dashboard (projects, reports, bookings, payments, documents,
+   messages) — this is where a logged-in user would see the bookings
+   they've made; the data is already there (linked via `user_id`), just
+   not surfaced in a UI yet
+3. Admin dashboard (including making `pricingPackages` admin-editable
+   instead of hard-coded, and managing/updating booking status)
+4. Flutterwave payment integration (server-side verified)
+5. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 
 ## Environment variables
