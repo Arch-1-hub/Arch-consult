@@ -17,6 +17,7 @@ export const founder = {
 export const primaryNav = [
   { label: "Services", href: "/services" },
   { label: "AI Consultant", href: "/ai-consultant" },
+  { label: "AI Tools", href: "/ai-tools" },
   { label: "Health Check", href: "/health-check" },
   { label: "Launch Wizard", href: "/launch-wizard" },
   { label: "Pricing", href: "/pricing" },

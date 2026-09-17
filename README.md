@@ -9,14 +9,13 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 6 — Booking System
+## Status: Stage 7 — AI Tools Suite
 
 Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
 the AI Business Consultant, Stage 4 the Health Check and Launch Wizard,
-Stage 5 real accounts and a database. Stage 6 adds a real, working booking
-system on top of that database.
-
-**One more small SQL step needed** — see below.
+Stage 5 real accounts and a database, Stage 6 the booking system. Stage 7
+adds 8 standalone AI tools — no new setup required, they reuse the same
+OpenAI/Groq connection from Stage 3.
 
 ### A note on honesty (read this)
 
@@ -132,8 +131,20 @@ npm run lint
   signed-out visitors to `/login`), and a `profiles` table with row-level
   security so a user can only ever read/write their own row. Navbar
   reflects real session state, fetched server-side.
+- **Booking system** (`/book-consultation`) — real form saving to a real
+  `bookings` table, auto-linked to the logged-in user if there is one.
+- **AI Tools suite** (`/ai-tools` + 8 tool pages) — Brand Name Generator,
+  Brand Strategy Generator, Logo Brief Generator, Marketing Plan
+  Generator, SWOT Analysis, Social Media Content Generator, Business
+  Proposal Generator, and Business Idea Analyzer. All 8 share one API
+  route (`app/api/ai-tools/route.ts`) and one result renderer
+  (`components/ai-tools/AIToolOutput.tsx`) — each tool is just a config
+  entry in `lib/ai-tools-data.ts` (fields + what the output should cover),
+  not a separate implementation, so adding a 9th tool later is a config
+  change, not new code. Uses the same OpenAI/Groq connection as the AI
+  Consultant — no additional setup needed if that's already configured.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
-  service and blog route), `robots.ts`.
+  service, blog, and AI tool route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
   respected, semantic landmarks, real form labels.
 
@@ -181,9 +192,10 @@ pretending to give them a real assessment.
 Supabase's **Table Editor → profiles**, change your row's `role` from
 `client` to `admin`.
 
-## Adding the bookings table (required for this stage)
+## Adding the bookings table (if you haven't already, from Stage 6)
 
-You already have a Supabase project from Stage 5. One more script to run:
+You already have a Supabase project from Stage 5. If you haven't run this
+yet:
 
 1. Supabase → your project → **SQL Editor → New query**
 2. Paste the entire contents of `supabase/002_bookings.sql`
@@ -192,9 +204,7 @@ You already have a Supabase project from Stage 5. One more script to run:
    read it back — this is what the future client dashboard will use)
 
 No new environment variables needed — it uses the same Supabase connection
-from Stage 5.
-
-## What's new in this stage
+from Stage 5. Booking details:
 
 - **Book a Consultation** (`/book-consultation`) — a real form: consultation
   type, preferred date/time (fixed slots for now — see note below), name,
@@ -220,15 +230,14 @@ from Stage 5.
 
 Everything now works, but the roadmap continues:
 
-1. AI Tools suite (Brand Name Generator, SWOT, etc. as standalone tools)
-2. Client dashboard (projects, reports, bookings, payments, documents,
+1. Client dashboard (projects, reports, bookings, payments, documents,
    messages) — this is where a logged-in user would see the bookings
    they've made; the data is already there (linked via `user_id`), just
    not surfaced in a UI yet
-3. Admin dashboard (including making `pricingPackages` admin-editable
+2. Admin dashboard (including making `pricingPackages` admin-editable
    instead of hard-coded, and managing/updating booking status)
-4. Flutterwave payment integration (server-side verified)
-5. Final QA pass: full route check, mobile pass, error/loading/empty
+3. Flutterwave payment integration (server-side verified)
+4. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 
 ## Environment variables

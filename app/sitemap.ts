@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { services, blogPosts } from "@/lib/constants";
+import { aiTools } from "@/lib/ai-tools-data";
 
 const base = "https://archconsult.com";
 
@@ -30,5 +31,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     lastModified: new Date(post.date),
   }));
 
-  return [...staticRoutes, ...serviceRoutes, ...blogRoutes];
+  const aiToolRoutes = aiTools.map((tool) => ({
+    url: `${base}/ai-tools/${tool.slug}`,
+    lastModified: new Date(),
+  }));
+
+  return [...staticRoutes, ...serviceRoutes, ...blogRoutes, ...aiToolRoutes];
 }
