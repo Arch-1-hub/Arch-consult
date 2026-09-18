@@ -9,13 +9,16 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 7 — AI Tools Suite
+## Status: Stage 8 — Client Dashboard
 
 Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
 the AI Business Consultant, Stage 4 the Health Check and Launch Wizard,
-Stage 5 real accounts and a database, Stage 6 the booking system. Stage 7
-adds 8 standalone AI tools — no new setup required, they reuse the same
-OpenAI/Groq connection from Stage 3.
+Stage 5 real accounts and a database, Stage 6 the booking system, Stage 7
+the AI Tools suite. Stage 8 adds the client dashboard — and, to give it
+something real to show, the ability to save Health Check, Launch Wizard,
+and AI Consultant results to your account for the first time.
+
+**One more SQL step needed** — see below.
 
 ### A note on honesty (read this)
 
@@ -143,6 +146,14 @@ npm run lint
   not a separate implementation, so adding a 9th tool later is a config
   change, not new code. Uses the same OpenAI/Groq connection as the AI
   Consultant — no additional setup needed if that's already configured.
+- **Client Dashboard** (`/dashboard`) — protected, tabbed (Overview,
+  Bookings, Reports, Projects, Payments, Documents, Messages). Bookings
+  and Reports show real data from the database; the other four are
+  honest "not built yet" placeholders, not fake data.
+- **Saved reports** — Health Check, Launch Wizard, and AI Consultant
+  results can be saved to your account (`reports` table, RLS-protected)
+  and viewed later in the dashboard, via one generic renderer that works
+  across all three report shapes.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
   service, blog, and AI tool route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
@@ -226,17 +237,52 @@ from Stage 5. Booking details:
   server-side and the visitor gets an honest message rather than a fake
   confirmation.
 
+## Adding the reports table (required for this stage)
+
+You already have a Supabase project from Stage 5. One more script to run:
+
+1. Supabase → your project → **SQL Editor → New query**
+2. Paste the entire contents of `supabase/003_reports.sql`
+3. Run it — creates the `reports` table with row-level security (only the
+   report's owner can ever see, insert, or delete it — there's no
+   guest/anonymous saving, unlike bookings, since a report needs an
+   account to be retrievable later)
+
+No new environment variables needed.
+
+## What's new in this stage
+
+- **Client Dashboard** (`/dashboard`) — protected route (redirects to
+  `/login` if signed out). Tabs: **Overview** (real counts and previews of
+  upcoming bookings and saved reports), **Bookings** (full upcoming/past
+  list, pulled from the real `bookings` table from Stage 6), **Reports**
+  (every saved Health Check / Launch Wizard / AI Consultation, expandable,
+  deletable), and **Projects / Payments / Documents / Messages** — these
+  four are honest "not built yet" states, not fake data, since those
+  features don't exist yet (they're later in the roadmap below).
+- **"Save to my account"** now appears on the Health Check, Launch
+  Wizard, and AI Consultant result screens. If signed in, it saves the
+  full result to the new `reports` table; if not, it shows a "Log in to
+  save this report" prompt rather than failing silently or saving nothing
+  invisibly.
+- One generic report viewer (`components/dashboard/ReportDataViewer.tsx`)
+  renders all three report shapes (health check scores, launch plans,
+  consultation assessments) without needing type-specific rendering code —
+  it just walks whatever JSON structure was saved.
+- Navbar's authenticated link now goes to `/dashboard` instead of
+  `/account` directly; profile editing is still at `/account`, reachable
+  from a "Profile settings" link inside the dashboard.
+
 ## What's intentionally not built yet
 
 Everything now works, but the roadmap continues:
 
-1. Client dashboard (projects, reports, bookings, payments, documents,
-   messages) — this is where a logged-in user would see the bookings
-   they've made; the data is already there (linked via `user_id`), just
-   not surfaced in a UI yet
-2. Admin dashboard (including making `pricingPackages` admin-editable
+1. Admin dashboard (including making `pricingPackages` admin-editable
    instead of hard-coded, and managing/updating booking status)
-3. Flutterwave payment integration (server-side verified)
+2. Flutterwave payment integration (server-side verified)
+3. Projects, Documents, and Messages — the dashboard has honest
+   placeholders for these; building them out is a natural follow-on to
+   whichever of Admin or Payments comes first
 4. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 

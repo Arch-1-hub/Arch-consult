@@ -2,6 +2,7 @@
 
 import { RefreshCw, Printer, AlertCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
+import SaveReportButton from "@/components/dashboard/SaveReportButton";
 
 type Recommendations = {
   summary: string;
@@ -27,7 +28,12 @@ export default function HealthCheckReport({
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between border-b border-ink-line pb-4 print:hidden">
         <p className="eyebrow">Your Business Health Check</p>
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-5 print:hidden">
+          <SaveReportButton
+            type="health_check"
+            title={`Business Health Check — Score ${overall}`}
+            data={{ categoryScores, overall, recommendations }}
+          />
           <button
             onClick={() => window.print()}
             className="flex items-center gap-1.5 text-xs text-ash hover:text-gold"

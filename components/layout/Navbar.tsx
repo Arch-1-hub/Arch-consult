@@ -39,10 +39,10 @@ export default function Navbar({ user }: { user: { email: string } | null }) {
           {user ? (
             <>
               <Link
-                href="/account"
+                href="/dashboard"
                 className="text-sm text-paper-white transition-colors hover:text-gold"
               >
-                Account
+                Dashboard
               </Link>
               <form action={signOutAction}>
                 <button
@@ -97,11 +97,11 @@ export default function Navbar({ user }: { user: { email: string } | null }) {
               {user ? (
                 <>
                   <Link
-                    href="/account"
+                    href="/dashboard"
                     onClick={() => setOpen(false)}
                     className="border border-ink-line px-5 py-3 text-center text-sm text-paper-white"
                   >
-                    Account
+                    Dashboard
                   </Link>
                   <form action={signOutAction}>
                     <button

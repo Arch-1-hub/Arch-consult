@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
+import SaveReportButton from "@/components/dashboard/SaveReportButton";
 import { services } from "@/lib/constants";
 
 export type Report = {
@@ -30,12 +31,19 @@ export default function ConsultantReport({
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between border-b border-ink-line pb-4">
         <p className="eyebrow">Your AI Assessment</p>
-        <button
-          onClick={onReset}
-          className="flex items-center gap-1.5 text-xs text-ash hover:text-gold"
-        >
-          <RefreshCw size={13} /> Start over
-        </button>
+        <div className="flex items-center gap-5">
+          <SaveReportButton
+            type="ai_consultation"
+            title={report.businessAssessment ? report.businessAssessment.slice(0, 60) : "AI Business Consultation"}
+            data={report}
+          />
+          <button
+            onClick={onReset}
+            className="flex items-center gap-1.5 text-xs text-ash hover:text-gold"
+          >
+            <RefreshCw size={13} /> Start over
+          </button>
+        </div>
       </div>
 
       <ReportSection title="Business Assessment" text={report.businessAssessment} />

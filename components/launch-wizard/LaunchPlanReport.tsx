@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { RefreshCw, Printer } from "lucide-react";
 import Button from "@/components/ui/Button";
+import SaveReportButton from "@/components/dashboard/SaveReportButton";
 import { services } from "@/lib/constants";
 
 export default function LaunchPlanReport({ plan, onReset }: { plan: any; onReset: () => void }) {
@@ -14,7 +15,12 @@ export default function LaunchPlanReport({ plan, onReset }: { plan: any; onReset
     <div className="flex flex-col gap-10">
       <div className="flex items-center justify-between border-b border-ink-line pb-4 print:hidden">
         <p className="eyebrow">Your Business Launch Plan</p>
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-5 print:hidden">
+          <SaveReportButton
+            type="launch_plan"
+            title={plan.businessConceptSummary ? plan.businessConceptSummary.slice(0, 60) : "Business Launch Plan"}
+            data={plan}
+          />
           <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs text-ash hover:text-gold">
             <Printer size={13} /> Save as PDF
           </button>

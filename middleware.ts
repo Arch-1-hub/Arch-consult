@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Routes that require a signed-in user. Extend this list as protected
 // pages (client dashboard, admin) are built in later stages.
-const PROTECTED_PREFIXES = ["/account"];
+const PROTECTED_PREFIXES = ["/account", "/dashboard"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
