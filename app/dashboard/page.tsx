@@ -126,8 +126,7 @@ function SummaryCard({
   value,
   note,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
-  label: string;
+icon: React.ElementType;  label: string;
   value: string | number;
   note?: string;
 }) {
