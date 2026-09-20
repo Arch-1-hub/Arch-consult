@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import Button from "@/components/ui/Button";
+import PackageCheckoutButton from "./PackageCheckoutButton";
 import { pricingPackages } from "@/lib/constants";
 
 export default function PricingCards() {
@@ -46,13 +47,21 @@ export default function PricingCards() {
                 ))}
               </ul>
 
-              <Button
-                href="/book-consultation"
-                variant={pkg.highlighted ? "primary" : "outline-dark"}
-                className="mt-8 w-full"
-              >
-                {pkg.slug === "custom-enterprise" ? "Request a Quote" : "Get Started"}
-              </Button>
+              {pkg.amountNGN ? (
+                <PackageCheckoutButton
+                  itemName={`${pkg.name} Package`}
+                  amount={pkg.amountNGN}
+                  highlighted={pkg.highlighted}
+                />
+              ) : (
+                <Button
+                  href="/book-consultation"
+                  variant={pkg.highlighted ? "primary" : "outline-dark"}
+                  className="mt-8 w-full"
+                >
+                  {pkg.slug === "custom-enterprise" ? "Request a Quote" : "Get Started"}
+                </Button>
+              )}
             </div>
           ))}
         </div>

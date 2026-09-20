@@ -9,16 +9,18 @@ worldwide). Because of that, this codebase deliberately avoids fabricated
 stats, testimonials, clients, or case studies anywhere in the UI — see
 "A note on honesty" below.
 
-## Status: Stage 8 — Client Dashboard
+## Status: Stage 9 — Payments (Paystack)
 
 Stage 1 delivered the foundation, Stage 2 the static content pages, Stage 3
 the AI Business Consultant, Stage 4 the Health Check and Launch Wizard,
 Stage 5 real accounts and a database, Stage 6 the booking system, Stage 7
-the AI Tools suite. Stage 8 adds the client dashboard — and, to give it
-something real to show, the ability to save Health Check, Launch Wizard,
-and AI Consultant results to your account for the first time.
+the AI Tools suite, Stage 8 the client dashboard. Stage 9 adds real
+Paystack payments — the highest-stakes stage so far, since it's the
+first one that moves real money, so read the safety notes below before
+doing anything else.
 
-**One more SQL step needed** — see below.
+**Read this before testing:** no one can be charged real money through
+this build by default — see "Why nothing is chargeable yet" below.
 
 ### A note on honesty (read this)
 
@@ -154,6 +156,10 @@ npm run lint
   results can be saved to your account (`reports` table, RLS-protected)
   and viewed later in the dashboard, via one generic renderer that works
   across all three report shapes.
+- **Payments (Paystack)** — real, server-verified checkout for pricing
+  packages once a real price is set (see "Why nothing is chargeable yet"
+  below — nothing is live by default). Guest checkout supported; results
+  show in `/dashboard → Payments` if the payer was logged in.
 - Base SEO: metadata, Open Graph tags, `sitemap.ts` (now includes every
   service, blog, and AI tool route), `robots.ts`.
 - Accessibility floor: visible focus rings, `prefers-reduced-motion`
@@ -237,9 +243,10 @@ from Stage 5. Booking details:
   server-side and the visitor gets an honest message rather than a fake
   confirmation.
 
-## Adding the reports table (required for this stage)
+## Adding the reports table (if you haven't already, from Stage 8)
 
-You already have a Supabase project from Stage 5. One more script to run:
+You already have a Supabase project from Stage 5. If you haven't run this
+yet:
 
 1. Supabase → your project → **SQL Editor → New query**
 2. Paste the entire contents of `supabase/003_reports.sql`
@@ -248,42 +255,99 @@ You already have a Supabase project from Stage 5. One more script to run:
    guest/anonymous saving, unlike bookings, since a report needs an
    account to be retrievable later)
 
-No new environment variables needed.
+## Setting up payments (Paystack) — required for this stage
+
+1. Create a Paystack account at **paystack.com** (free to sign up).
+   Their dashboard gives you both **test** and **live** API keys — start
+   with test keys only.
+2. Dashboard → **Settings → API Keys** → copy your **Secret Key** (test
+   mode: starts with `sk_test_`).
+3. Add it as `PAYSTACK_SECRET_KEY` (locally in `.env.local`, on Vercel
+   in Settings → Environment Variables → redeploy).
+4. Get your Supabase **service role key**: Supabase → Project Settings →
+   API → **Legacy anon, service_role** tab → copy the `service_role`
+   secret (never the anon one for this). Add it as
+   `SUPABASE_SERVICE_ROLE_KEY`.
+5. Run the payments table migration: Supabase → **SQL Editor → New
+   query** → paste the entire contents of `supabase/004_payments.sql` →
+   Run.
+6. Make sure `NEXT_PUBLIC_SITE_URL` is still set to your real deployed
+   URL (from Stage 5/6) — Paystack redirects back to
+   `{NEXT_PUBLIC_SITE_URL}/payment/callback` after checkout, and this
+   will silently break if that's still `localhost`.
+
+## Why nothing is chargeable yet
+
+Every price on `/pricing` still shows "Placeholder" and has no working
+"Pay Now" button — on purpose. The full payment pipeline (checkout
+creation → Paystack hosted page → server-side verification → database
+record) is built and working, but it only activates for a package once you
+deliberately give it a real `amountNGN` value in `lib/constants.ts`
+(`pricingPackages`). Until you do that, the Pricing page behaves exactly
+as it did in Stage 2 — informational only, linking to
+`/book-consultation`. This means the payment mechanism is fully testable
+by you right now, but no real visitor can accidentally pay against a
+number nobody has confirmed.
+
+**To test the full flow safely:**
+
+1. In `lib/constants.ts`, temporarily add `amountNGN: 100` to one package
+   (e.g. Starter) — this uses Paystack's **test mode**, so as long as
+   your `PAYSTACK_SECRET_KEY` is a `sk_test_` key, no real money
+   moves regardless of the amount.
+2. Deploy, visit `/pricing`, and click the new "Pay Now" button on that
+   package.
+3. On Paystack's hosted checkout page, use one of their published
+   **test card numbers** (search "Paystack test cards" in their docs —
+   they publish specific card numbers, OTPs, and PINs that simulate
+   success and failure without touching a real account).
+4. After checkout, you'll land on `/payment/callback` — this is where the
+   server verifies the transaction directly with Paystack before
+   showing success. Check `/dashboard → Payments` afterward to see the
+   real saved record.
+5. Once you're confident it works and have confirmed your real prices,
+   replace the test amount with the real one and switch
+   `PAYSTACK_SECRET_KEY` to your **live** key to go live.
 
 ## What's new in this stage
 
-- **Client Dashboard** (`/dashboard`) — protected route (redirects to
-  `/login` if signed out). Tabs: **Overview** (real counts and previews of
-  upcoming bookings and saved reports), **Bookings** (full upcoming/past
-  list, pulled from the real `bookings` table from Stage 6), **Reports**
-  (every saved Health Check / Launch Wizard / AI Consultation, expandable,
-  deletable), and **Projects / Payments / Documents / Messages** — these
-  four are honest "not built yet" states, not fake data, since those
-  features don't exist yet (they're later in the roadmap below).
-- **"Save to my account"** now appears on the Health Check, Launch
-  Wizard, and AI Consultant result screens. If signed in, it saves the
-  full result to the new `reports` table; if not, it shows a "Log in to
-  save this report" prompt rather than failing silently or saving nothing
-  invisibly.
-- One generic report viewer (`components/dashboard/ReportDataViewer.tsx`)
-  renders all three report shapes (health check scores, launch plans,
-  consultation assessments) without needing type-specific rendering code —
-  it just walks whatever JSON structure was saved.
-- Navbar's authenticated link now goes to `/dashboard` instead of
-  `/account` directly; profile editing is still at `/account`, reachable
-  from a "Profile settings" link inside the dashboard.
+- **Real Paystack checkout** for pricing packages, once a package has
+  a real `amountNGN` set (see above). Uses Paystack's server-to-server
+  "Standard" flow: our server creates the checkout session and gets back
+  a hosted payment link — no Paystack JavaScript is loaded in the app
+  at all, which keeps the client-side code simple and avoids any
+  content-security-policy complications.
+- **Server-side-only verification** (`app/payment/callback/page.tsx`) —
+  the redirect back from Paystack is never trusted on its own. The
+  server independently calls Paystack's verify endpoint and checks the
+  status, amount, and currency all match before ever marking a payment
+  successful in the database. This is the single most important security
+  property of this stage.
+- **`payments` table locked down to server-only writes**
+  (`lib/supabase/admin.ts`, using the Supabase service role key) — no
+  RLS policy allows the browser to create or update a payment row at all,
+  from any account. The only thing a logged-in user's session can do is
+  *read* their own payment history — every write happens from trusted
+  server code that already independently verified the transaction with
+  Paystack.
+- **Guest checkout supported** — paying doesn't require an account, but
+  if the payer happens to be logged in, the payment is automatically
+  linked to their account and shows up in their dashboard.
+- **Dashboard → Payments** now shows real data instead of the Stage 8
+  placeholder — every payment tied to your account, with status.
+- If Paystack or the service role key isn't configured, checkout shows
+  an honest setup message rather than a broken or fake "Pay Now" button.
 
 ## What's intentionally not built yet
 
 Everything now works, but the roadmap continues:
 
-1. Admin dashboard (including making `pricingPackages` admin-editable
-   instead of hard-coded, and managing/updating booking status)
-2. Flutterwave payment integration (server-side verified)
-3. Projects, Documents, and Messages — the dashboard has honest
-   placeholders for these; building them out is a natural follow-on to
-   whichever of Admin or Payments comes first
-4. Final QA pass: full route check, mobile pass, error/loading/empty
+1. Admin dashboard (view all clients/bookings/payments, edit services and
+   `pricingPackages` without a code deploy, manage blog/testimonials,
+   update booking status)
+2. Projects, Documents, and Messages — the dashboard has honest
+   placeholders for these
+3. Final QA pass: full route check, mobile pass, error/loading/empty
    states, accessibility pass
 
 ## Environment variables

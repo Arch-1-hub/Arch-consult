@@ -212,6 +212,17 @@ export type PricingPackage = {
   description: string;
   features: string[];
   highlighted?: boolean;
+  /**
+   * Real numeric amount in NGN to charge via Flutterwave. Deliberately
+   * left unset for every package by default — until a real, confirmed
+   * price is entered here, the Pricing page will NOT show a working "Pay
+   * Now" button for that package, only the existing "Get Started" link
+   * to book a consultation. This is intentional: the payment pipeline is
+   * fully built and testable, but no one can be charged against the
+   * placeholder prices shown until you deliberately set a real amount.
+   * See README "Turning on real payments" for how to test safely first.
+   */
+  amountNGN?: number;
 };
 
 export const pricingPackages: PricingPackage[] = [

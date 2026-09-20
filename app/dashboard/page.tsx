@@ -27,6 +27,12 @@ export default async function DashboardOverviewPage() {
     .order("created_at", { ascending: false })
     .limit(3);
 
+  const { count: paymentsCount } = await supabase
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user!.id)
+    .eq("status", "successful");
+
   return (
     <div className="flex flex-col gap-10">
       <div className="grid gap-px overflow-hidden bg-ink-line sm:grid-cols-2 lg:grid-cols-4">
@@ -37,7 +43,7 @@ export default async function DashboardOverviewPage() {
         />
         <SummaryCard icon={FileText} label="Saved Reports" value={recentReports?.length ?? 0} />
         <SummaryCard icon={Briefcase} label="Active Projects" value="—" note="Coming soon" />
-        <SummaryCard icon={CreditCard} label="Payments" value="—" note="Coming soon" />
+        <SummaryCard icon={CreditCard} label="Successful Payments" value={paymentsCount ?? 0} />
       </div>
 
       <div className="grid gap-10 lg:grid-cols-2">
@@ -126,7 +132,8 @@ function SummaryCard({
   value,
   note,
 }: {
-icon: React.ElementType;  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  label: string;
   value: string | number;
   note?: string;
 }) {
