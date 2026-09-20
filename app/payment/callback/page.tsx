@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, LucideIcon } from "lucide-react";
 import PageHero from "@/components/shared/PageHero";
 import Button from "@/components/ui/Button";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -125,7 +125,7 @@ function Result({
   body,
   success = false,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
   heading: string;
   body: string;
   success?: boolean;

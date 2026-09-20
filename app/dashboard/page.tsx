@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, FileText, Briefcase, CreditCard } from "lucide-react";
+import { CalendarCheck, FileText, Briefcase, CreditCard, LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -132,7 +132,7 @@ function SummaryCard({
   value,
   note,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
   label: string;
   value: string | number;
   note?: string;
