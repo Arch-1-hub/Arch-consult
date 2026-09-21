@@ -230,6 +230,7 @@ export const pricingPackages: PricingPackage[] = [
     slug: "starter",
     name: "Starter",
     price: "Placeholder",
+amountNGN: 100,
     cadence: "one-time",
     description: "For early-stage businesses that need clarity before they build.",
     features: [
