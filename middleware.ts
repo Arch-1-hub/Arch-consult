@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Routes that require a signed-in user. Extend this list as protected
 // pages (client dashboard, admin) are built in later stages.
-const PROTECTED_PREFIXES = ["/account", "/dashboard"];
+// /admin only checks "signed in" here; the admin ROLE is checked on the
+// server in lib/admin.ts and enforced again by database rules.
+const PROTECTED_PREFIXES = ["/account", "/dashboard", "/admin"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -12,6 +14,7 @@ export async function middleware(request: NextRequest) {
   // pass through. Auth pages themselves will show a clear setup message.
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
   if (!supabaseUrl || !supabaseAnonKey) {
     return response;
   }
