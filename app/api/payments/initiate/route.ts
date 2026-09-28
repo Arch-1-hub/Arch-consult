@@ -81,12 +81,40 @@ export async function POST(req: NextRequest) {
   } = await sessionClient.auth.getUser();
 
   const admin = createAdminClient();
+
+  // SECURITY: for packages, never trust the price sent by the browser.
+  // Look the real price up in our own database, so nobody can pay less by
+  // editing the request. Packages with no charge amount cannot be paid online.
+  let itemName: string = body.itemName;
+  let amount: number = body.amount;
+  if (body.itemType === "package") {
+    const packageName = body.itemName.replace(/ Package$/, "");
+    const { data: pkg, error: pkgError } = await admin
+      .from("pricing_packages")
+      .select("name, amount_ngn")
+      .eq("name", packageName)
+      .maybeSingle();
+
+    if (pkgError) {
+      console.error("[payments] Could not look up package price:", pkgError);
+      return NextResponse.json({ error: "Couldn't start checkout. Please try again." }, { status: 500 });
+    }
+    if (!pkg || !pkg.amount_ngn) {
+      return NextResponse.json(
+        { error: "This package isn't available for online payment. Please book a consultation." },
+        { status: 400 }
+      );
+    }
+    itemName = `${pkg.name} Package`;
+    amount = Number(pkg.amount_ngn);
+  }
+
   const { error: insertError } = await admin.from("payments").insert({
     user_id: user?.id ?? null,
     tx_ref: txRef,
     item_type: body.itemType,
-    item_name: body.itemName,
-    amount: body.amount,
+    item_name: itemName,
+    amount,
     currency,
     status: "pending",
     customer_email: body.customerEmail,
@@ -109,12 +137,12 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         email: body.customerEmail,
-        amount: Math.round(body.amount * 100),
+        amount: Math.round(amount * 100),
         currency,
         reference: txRef,
         callback_url: `${siteUrl}/payment/callback`,
         metadata: {
-          item_name: body.itemName,
+          item_name: itemName,
           customer_name: body.customerName,
         },
       }),
