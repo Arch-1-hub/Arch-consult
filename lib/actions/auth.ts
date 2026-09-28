@@ -65,11 +65,27 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
   }
 
   const supabase = createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) return { error: "Incorrect email or password." };
 
-  redirect(redirectTo || "/account");
+  // Only allow redirects to pages on this site (blocks "//evil.com" style links).
+  const safeRedirect =
+    redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/account";
+
+  // Admins who log in from a normal landing page go straight to /admin.
+  // If they were sent to some other specific page, we respect that.
+  const defaultLandings = ["/account", "/dashboard", "/login", "/"];
+  if (data?.user && defaultLandings.includes(safeRedirect)) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .single();
+    if (profile?.role === "admin") redirect("/admin");
+  }
+
+  redirect(safeRedirect);
   return {};
 }
 
