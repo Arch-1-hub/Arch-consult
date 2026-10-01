@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-import { getAdminOrNull } from "@/lib/admin";
+import { getStaffOrNull } from "@/lib/admin";
 import { ALLOWED_TYPES, MAX_FILE_BYTES, sanitizeFileName } from "@/lib/documents";
 
+// Admins can send a document to any client. Consultants can send one too,
+// but only to their own assigned clients — the database rejects anything
+// else regardless of what ownerId is sent here, so this route doesn't need
+// to re-check the assignment itself.
 export async function POST(req: Request) {
-  const admin = await getAdminOrNull();
-  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const staff = await getStaffOrNull();
+  if (!staff) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
@@ -27,18 +31,21 @@ export async function POST(req: Request) {
   const path = `${ownerId}/${crypto.randomUUID()}-${cleanName}`;
 
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error: uploadError } = await admin.supabase.storage.from("documents").upload(path, bytes, {
+  const { error: uploadError } = await staff.supabase.storage.from("documents").upload(path, bytes, {
     contentType: file.type,
     upsert: false,
   });
   if (uploadError) {
-    return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Upload failed. If you're a consultant, check this client is assigned to you." },
+      { status: 500 }
+    );
   }
 
-  const { error: dbError } = await admin.supabase.from("documents").insert({
+  const { error: dbError } = await staff.supabase.from("documents").insert({
     owner_id: ownerId,
-    uploaded_by: admin.user.id,
-    uploaded_by_role: "admin",
+    uploaded_by: staff.user.id,
+    uploaded_by_role: staff.role,
     file_path: path,
     file_name: cleanName,
     file_type: file.type,
@@ -46,8 +53,11 @@ export async function POST(req: Request) {
     note,
   });
   if (dbError) {
-    await admin.supabase.storage.from("documents").remove([path]);
-    return NextResponse.json({ error: "Could not save the document record." }, { status: 500 });
+    await staff.supabase.storage.from("documents").remove([path]);
+    return NextResponse.json(
+      { error: "Could not save the document record. If you're a consultant, check this client is assigned to you." },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true });

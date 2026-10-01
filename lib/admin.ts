@@ -25,7 +25,7 @@ export async function requireStaff() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login?redirectTo=/admin");
+  if (!user) redirect("/login?redirectTo=/consultant");
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -50,7 +50,12 @@ export async function getAdminOrNull() {
   return profile?.role === "admin" ? { supabase, user } : null;
 }
 
-/** For API routes: null if not admin or consultant. */
+/**
+ * For API routes shared by admins AND consultants. Returns the caller's
+ * actual role so the route can record who really did something — the
+ * database's own row-level rules are still what decides which rows they're
+ * allowed to touch, this is just for display/record-keeping.
+ */
 export async function getStaffOrNull() {
   const supabase = createClient();
   const {
@@ -59,5 +64,5 @@ export async function getStaffOrNull() {
   if (!user) return null;
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "admin" && profile?.role !== "consultant") return null;
-  return { supabase, user, isAdmin: profile.role === "admin" };
+  return { supabase, user, isAdmin: profile.role === "admin", role: profile.role as "admin" | "consultant" };
 }

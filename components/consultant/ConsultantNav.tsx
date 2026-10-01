@@ -4,21 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/bookings", label: "Bookings" },
-  { href: "/admin/payments", label: "Payments" },
-  { href: "/admin/pricing", label: "Pricing" },
-  { href: "/admin/documents", label: "Documents" },
-  { href: "/admin/team", label: "Team" },
-  { href: "/admin/messages", label: "Messages" },
-  { href: "/admin/users", label: "Users" },
+  { href: "/consultant", label: "Overview" },
+  { href: "/consultant/bookings", label: "Bookings" },
+  { href: "/consultant/documents", label: "Documents" },
+  { href: "/consultant/messages", label: "Messages" },
 ];
 
-export default function AdminNav() {
+export default function ConsultantNav() {
   const pathname = usePathname();
   return (
     <nav
-      aria-label="Admin sections"
+      aria-label="Consultant sections"
       className="mt-6 flex gap-2 overflow-x-auto border-b border-ink-line pb-3"
     >
       {tabs.map((t) => {
