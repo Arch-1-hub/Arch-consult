@@ -8,6 +8,7 @@ const tabs = [
   { href: "/consultant/bookings", label: "Bookings" },
   { href: "/consultant/documents", label: "Documents" },
   { href: "/consultant/messages", label: "Messages" },
+  { href: "/consultant/projects", label: "Projects" },
 ];
 
 export default function ConsultantNav() {

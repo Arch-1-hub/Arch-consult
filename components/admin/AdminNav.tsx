@@ -11,6 +11,7 @@ const tabs = [
   { href: "/admin/documents", label: "Documents" },
   { href: "/admin/team", label: "Team" },
   { href: "/admin/messages", label: "Messages" },
+  { href: "/admin/projects", label: "Projects" },
   { href: "/admin/users", label: "Users" },
 ];
 

@@ -1,12 +1,32 @@
-import { Briefcase } from "lucide-react";
-import ComingSoonSection from "@/components/dashboard/ComingSoonSection";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import ProjectsView from "@/components/dashboard/ProjectsView";
 
-export default function DashboardProjectsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function DashboardProjectsPage() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login?redirectTo=/dashboard/projects");
+
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id, title, status, progress_percent, summary, milestones")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return <p className="text-ash">Could not load projects: {error.message}</p>;
+  }
+
   return (
-    <ComingSoonSection
-      icon={Briefcase}
-      title="Projects aren't set up yet"
-      description="Once Arch Consult starts an engagement with you, active projects — with status, progress, files and notes — will show up here. This is coming in a later build stage."
-    />
+    <div>
+      <h1 className="font-display text-2xl text-paper-white">Projects</h1>
+      <p className="mt-1 text-sm text-ash">Where things stand on your Arch Consult engagement.</p>
+      <div className="mt-6">
+        <ProjectsView projects={(data ?? []) as any} />
+      </div>
+    </div>
   );
 }
