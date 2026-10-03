@@ -33,6 +33,12 @@ export default async function DashboardOverviewPage() {
     .eq("user_id", user!.id)
     .eq("status", "successful");
 
+  const { count: activeProjectsCount } = await supabase
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("client_id", user!.id)
+    .neq("status", "completed");
+
   return (
     <div className="flex flex-col gap-10">
       <div className="grid gap-px overflow-hidden bg-ink-line sm:grid-cols-2 lg:grid-cols-4">
@@ -42,7 +48,7 @@ export default async function DashboardOverviewPage() {
           value={upcomingBookings?.length ?? 0}
         />
         <SummaryCard icon={FileText} label="Saved Reports" value={recentReports?.length ?? 0} />
-        <SummaryCard icon={Briefcase} label="Active Projects" value="—" note="Coming soon" />
+        <SummaryCard icon={Briefcase} label="Active Projects" value={activeProjectsCount ?? 0} />
         <SummaryCard icon={CreditCard} label="Successful Payments" value={paymentsCount ?? 0} />
       </div>
 
