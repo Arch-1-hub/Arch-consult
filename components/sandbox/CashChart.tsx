@@ -6,9 +6,19 @@ const H = 240;
 const PAD = { l: 52, r: 14, t: 14, b: 30 };
 
 /** Cash balance by month, drawn as plain SVG so it needs no chart library and prints cleanly. */
-export default function CashChart({ rows, startingCapital }: { rows: MonthRow[]; startingCapital: number }) {
+export default function CashChart({
+  rows,
+  startingCapital,
+  compare,
+  compareLabel,
+}: {
+  rows: MonthRow[];
+  startingCapital: number;
+  compare?: MonthRow[];
+  compareLabel?: string;
+}) {
   const n = rows.length;
-  const cash = rows.map((r) => r.cash);
+  const cash = [...rows, ...(compare ?? [])].map((r) => r.cash);
   const minV = Math.min(0, ...cash);
   const maxV = Math.max(startingCapital, ...cash, 1);
   const span = maxV - minV || 1;
@@ -16,6 +26,7 @@ export default function CashChart({ rows, startingCapital }: { rows: MonthRow[];
   const x = (month: number) => PAD.l + ((month - 1) / Math.max(1, n - 1)) * (W - PAD.l - PAD.r);
   const y = (v: number) => PAD.t + (1 - (v - minV) / span) * (H - PAD.t - PAD.b);
 
+  const cmpLine = (compare ?? []).map((r, i) => `${i === 0 ? "M" : "L"}${x(r.month).toFixed(1)} ${y(r.cash).toFixed(1)}`).join(" ");
   const line = rows.map((r, i) => `${i === 0 ? "M" : "L"}${x(r.month).toFixed(1)} ${y(r.cash).toFixed(1)}`).join(" ");
 
   const yTicks = [0, 1, 2, 3].map((i) => minV + (span * i) / 3);
@@ -58,6 +69,9 @@ export default function CashChart({ rows, startingCapital }: { rows: MonthRow[];
         ) : null}
         <line x1={PAD.l} x2={W - PAD.r} y1={zeroY} y2={zeroY} className="stroke-ash" strokeWidth={0.8} strokeDasharray="3 3" />
 
+        {compare ? (
+          <path d={cmpLine} fill="none" className="stroke-red-400" strokeWidth={1.6} strokeDasharray="4 3" strokeLinejoin="round" />
+        ) : null}
         <path d={line} fill="none" className="stroke-gold" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
 
         <circle cx={lowX} cy={y(low.cash)} r={3.5} className={low.cash < 0 ? "fill-red-400" : "fill-gold"} />
@@ -81,7 +95,8 @@ export default function CashChart({ rows, startingCapital }: { rows: MonthRow[];
         </text>
       </svg>
       <figcaption className="text-xs text-ash">
-        Cash in the bank at the end of each month. The dashed line is zero. Below it, you are out of money.
+        Cash in the bank at the end of each month. The dashed grey line is zero. Below it, you are out of money.
+        {compare ? ` Gold is your plan. The dashed red line is "${compareLabel ?? "the scenario"}".` : ""}
       </figcaption>
     </figure>
   );

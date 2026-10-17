@@ -5,7 +5,9 @@ import Button from "@/components/ui/Button";
 import { monthWord, naira, percent, whole } from "@/lib/sandbox/format";
 import { buildVerdict } from "@/lib/sandbox/verdict";
 import { SignalSeverity, SimulationResult } from "@/lib/sandbox/types";
+import { RULE_SOURCES, RULES_VERIFIED, RuleContext, RuleNote } from "@/lib/sandbox/nigeria-rules";
 import CashChart from "./CashChart";
+import ScenarioLab from "./ScenarioLab";
 
 const SEVERITY_STYLE: Record<SignalSeverity, { bar: string; label: string }> = {
   critical: { bar: "border-red-400", label: "Serious" },
@@ -27,11 +29,13 @@ interface DashboardProps {
   result: SimulationResult;
   businessLabel: string;
   stateName: string;
+  notes: RuleNote[];
+  ctx: RuleContext;
   onEdit: () => void;
   onRestart: () => void;
 }
 
-export default function Dashboard({ result, businessLabel, stateName, onEdit, onRestart }: DashboardProps) {
+export default function Dashboard({ result, businessLabel, stateName, notes, ctx, onEdit, onRestart }: DashboardProps) {
   const { summary: s, rows, signals, inputs } = result;
   const months = inputs.months;
   const verdict = buildVerdict(s, months, inputs.startingCapital);
@@ -115,6 +119,36 @@ export default function Dashboard({ result, businessLabel, stateName, onEdit, on
           </ul>
         </section>
       ) : null}
+
+      <ScenarioLab inputs={inputs} ctx={ctx} base={result} />
+
+      <section aria-labelledby="rules-heading" className="flex flex-col gap-4">
+        <h3 id="rules-heading" className="font-display text-xl text-paper-white">
+          Nigerian rules applied to your numbers
+        </h3>
+        <ul className="flex flex-col gap-3">
+          {notes.map((n) => (
+            <li key={n.code} className="flex flex-col gap-1 border border-ink-line px-4 py-3">
+              <span className="text-sm text-paper-white">{n.title}</span>
+              <span className="text-xs leading-relaxed text-ash">{n.text}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs leading-relaxed text-ash">
+          Based on the Nigeria Tax Act 2025 rules in force from January 2026, last checked {RULES_VERIFIED}. This is a planning
+          estimate, not tax advice. Rules change, so confirm with a qualified tax adviser or the Nigeria Revenue Service.
+          Sources:{" "}
+          {RULE_SOURCES.map((s, i) => (
+            <span key={s.url}>
+              {i > 0 ? "; " : ""}
+              <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-paper-white">
+                {s.label}
+              </a>
+            </span>
+          ))}
+          .
+        </p>
+      </section>
 
       <details className="border border-ink-line">
         <summary className="cursor-pointer px-4 py-3 text-sm text-paper-white">See every month</summary>

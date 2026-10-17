@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import WizardShell from "@/components/shared/WizardShell";
-import { SimulationInputError, simulate } from "@/lib/sandbox/engine";
+import { SimulationInputError, validateInputs } from "@/lib/sandbox/engine";
+import { RuleNote, TaxStatus } from "@/lib/sandbox/nigeria-rules";
+import { runWithRules } from "@/lib/sandbox/run";
 import { cloneInputs, getPreset, PRESETS } from "@/lib/sandbox/presets";
 import { isStepValid, TOTAL_STEPS } from "@/lib/sandbox/step-rules";
 import { SimulationInputs, SimulationResult } from "@/lib/sandbox/types";
@@ -16,7 +18,9 @@ export default function SandboxApp() {
   const [presetId, setPresetId] = useState<string | null>(null);
   const [stateName, setStateName] = useState("");
   const [inputs, setInputs] = useState<SimulationInputs>(BLANK);
+  const [status, setStatus] = useState<TaxStatus>("company");
   const [result, setResult] = useState<SimulationResult | null>(null);
+  const [notes, setNotes] = useState<RuleNote[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const topRef = useRef<HTMLDivElement>(null);
   const first = useRef(true);
@@ -42,6 +46,8 @@ export default function SandboxApp() {
   const businessLabel = presetId ? getPreset(presetId)?.label ?? "Your business" : "Your business";
   const valid = isStepValid(step, { presetId, stateName, inputs });
 
+  const ctx = { status, professionalServices: presetId === "professional-services" };
+
   function next() {
     if (step < TOTAL_STEPS) {
       setStep(step + 1);
@@ -49,7 +55,11 @@ export default function SandboxApp() {
     }
     try {
       setErrors([]);
-      setResult(simulate(inputs));
+      const problems = validateInputs(inputs);
+      if (problems.length > 0) throw new SimulationInputError(problems);
+      const run = runWithRules(inputs, ctx);
+      setNotes(run.notes);
+      setResult(run.result);
     } catch (e) {
       setErrors(e instanceof SimulationInputError ? e.errors : ["Something went wrong running the simulation."]);
     }
@@ -64,6 +74,8 @@ export default function SandboxApp() {
     setErrors([]);
     setPresetId(null);
     setStateName("");
+    setStatus("company");
+    setNotes([]);
     setInputs(BLANK());
     setStep(1);
   }
@@ -75,6 +87,8 @@ export default function SandboxApp() {
           result={result}
           businessLabel={businessLabel}
           stateName={stateName}
+          notes={notes}
+          ctx={ctx}
           onEdit={() => {
             setResult(null);
             setStep(TOTAL_STEPS);
@@ -119,6 +133,8 @@ export default function SandboxApp() {
             businessLabel={businessLabel}
             stateName={stateName}
             errors={errors}
+            status={status}
+            onStatus={setStatus}
           />
         )}
       </WizardShell>

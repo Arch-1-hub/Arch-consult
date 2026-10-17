@@ -6,6 +6,7 @@ import { naira, percent } from "@/lib/sandbox/format";
 import { NIGERIAN_STATES } from "@/lib/sandbox/nigeria";
 import { PRESETS } from "@/lib/sandbox/presets";
 import { monthlyFixedCosts } from "@/lib/sandbox/step-rules";
+import { TaxStatus } from "@/lib/sandbox/nigeria-rules";
 import { SimulationInputs } from "@/lib/sandbox/types";
 import { ChoiceCards, CheckboxField, NumberField, PercentField, StepHeader, TextInput } from "./fields";
 
@@ -331,12 +332,16 @@ export function StepReview({
   businessLabel,
   stateName,
   errors,
+  status,
+  onStatus,
 }: {
   inputs: SimulationInputs;
   update: Patch;
   businessLabel: string;
   stateName: string;
   errors: string[];
+  status: TaxStatus;
+  onStatus: (s: TaxStatus) => void;
 }) {
   const fixed = monthlyFixedCosts(inputs);
   const rows: [string, string][] = [
@@ -364,6 +369,20 @@ export function StepReview({
         ))}
       </dl>
 
+      <ChoiceCards<TaxStatus>
+        legend="How is the business registered?"
+        value={status}
+        onChange={onStatus}
+        options={[
+          { value: "company", label: "Limited company (Ltd)", description: "Pays company tax, which is 0% for small companies." },
+          { value: "sole", label: "Business name or sole proprietor", description: "You pay personal income tax on the profit." },
+        ]}
+        columns={2}
+      />
+      <p className="-mt-2 text-xs text-ash">
+        Nigerian tax, pension and payroll rules are applied for you. You will see exactly which ones with your results.
+      </p>
+
       <details className="border border-ink-line">
         <summary className="cursor-pointer px-4 py-3 text-sm text-paper-white">Economic assumptions (you can leave these)</summary>
         <div className="flex flex-col gap-5 border-t border-ink-line p-4">
@@ -378,18 +397,6 @@ export function StepReview({
             value={inputs.priceIncreaseAnnual}
             onChange={(f) => update({ priceIncreaseAnnual: f })}
             hint="If costs rise faster than prices, your margin shrinks."
-          />
-          <PercentField
-            label="Employer costs on top of salaries"
-            value={inputs.payrollOnCostRate}
-            onChange={(f) => update({ payrollOnCostRate: f })}
-            hint="Pension and other employer contributions."
-          />
-          <PercentField
-            label="Tax on monthly profit"
-            value={inputs.profitTaxRate}
-            onChange={(f) => update({ profitTaxRate: f })}
-            hint="Simplified to one flat rate for now. Leave at 0% to see results before tax."
           />
         </div>
       </details>
