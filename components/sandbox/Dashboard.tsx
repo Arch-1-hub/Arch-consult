@@ -7,6 +7,7 @@ import { buildVerdict } from "@/lib/sandbox/verdict";
 import { SignalSeverity, SimulationResult } from "@/lib/sandbox/types";
 import { RULE_SOURCES, RULES_VERIFIED, RuleContext, RuleNote } from "@/lib/sandbox/nigeria-rules";
 import CashChart from "./CashChart";
+import Advisor from "./Advisor";
 import ScenarioLab from "./ScenarioLab";
 
 const SEVERITY_STYLE: Record<SignalSeverity, { bar: string; label: string }> = {
@@ -121,6 +122,8 @@ export default function Dashboard({ result, businessLabel, stateName, notes, ctx
       ) : null}
 
       <ScenarioLab inputs={inputs} ctx={ctx} base={result} />
+
+      <Advisor inputs={inputs} ctx={ctx} stateName={stateName} />
 
       <section aria-labelledby="rules-heading" className="flex flex-col gap-4">
         <h3 id="rules-heading" className="font-display text-xl text-paper-white">
