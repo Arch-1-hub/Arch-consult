@@ -3,8 +3,6 @@
 import { FormEvent, useState } from "react";
 import Button from "@/components/ui/Button";
 import { ADVISOR_QUESTION_LIMIT, MAX_QUESTION_CHARS } from "@/lib/sandbox/advisor";
-import { RuleContext } from "@/lib/sandbox/nigeria-rules";
-import { SimulationInputs } from "@/lib/sandbox/types";
 
 interface Turn {
   q: string;
@@ -18,21 +16,12 @@ const SUGGESTIONS = [
   "Which scenario should worry me most, and why?",
 ];
 
-export default function Advisor({
-  inputs,
-  ctx,
-  stateName,
-}: {
-  inputs: SimulationInputs;
-  ctx: RuleContext;
-  stateName: string;
-}) {
+export default function Advisor({ simulationId }: { simulationId: string }) {
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const left = ADVISOR_QUESTION_LIMIT - turns.length;
+  const [left, setLeft] = useState(ADVISOR_QUESTION_LIMIT);
 
   async function ask(q: string) {
     const text = q.trim();
@@ -43,13 +32,15 @@ export default function Advisor({
       const res = await fetch("/api/sandbox/advisor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, inputs, ctx, stateName, history: turns.slice(-4) }),
+        body: JSON.stringify({ simulationId, question: text, history: turns.slice(-4) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.answer) {
+        if (data.code === "limit") setLeft(0);
         setError(data.error || "The advisor couldn't answer right now. Please try again.");
       } else {
         setTurns((t) => [...t, { q: text, a: data.answer }]);
+        setLeft(typeof data.questionsLeft === "number" ? data.questionsLeft : left - 1);
         setQuestion("");
       }
     } catch {

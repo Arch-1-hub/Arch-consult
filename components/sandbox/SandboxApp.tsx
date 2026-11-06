@@ -2,18 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import WizardShell from "@/components/shared/WizardShell";
-import { SimulationInputError, validateInputs } from "@/lib/sandbox/engine";
+import { PageAccess, Plan } from "@/lib/sandbox/entitlement";
 import { RuleNote, TaxStatus } from "@/lib/sandbox/nigeria-rules";
-import { runWithRules } from "@/lib/sandbox/run";
 import { cloneInputs, getPreset, PRESETS } from "@/lib/sandbox/presets";
 import { isStepValid, TOTAL_STEPS } from "@/lib/sandbox/step-rules";
 import { SimulationInputs, SimulationResult } from "@/lib/sandbox/types";
+import Button from "@/components/ui/Button";
+import AccessGate from "./AccessGate";
 import Dashboard from "./Dashboard";
 import { Patch, StepBusiness, StepCosts, StepCustomers, StepMoney, StepOffer, StepReview } from "./steps";
 
 const BLANK = (): SimulationInputs => cloneInputs((getPreset("custom") ?? PRESETS[PRESETS.length - 1]).inputs);
 
-export default function SandboxApp() {
+export default function SandboxApp({ access }: { access: PageAccess }) {
   const [step, setStep] = useState(1);
   const [presetId, setPresetId] = useState<string | null>(null);
   const [stateName, setStateName] = useState("");
@@ -22,6 +23,10 @@ export default function SandboxApp() {
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [notes, setNotes] = useState<RuleNote[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const [gate, setGate] = useState<PageAccess | null>(null);
+  const [simulationId, setSimulationId] = useState("");
+  const [plan, setPlan] = useState<Plan>("paid");
   const topRef = useRef<HTMLDivElement>(null);
   const first = useRef(true);
 
@@ -48,20 +53,38 @@ export default function SandboxApp() {
 
   const ctx = { status, professionalServices: presetId === "professional-services" };
 
-  function next() {
+  async function next() {
     if (step < TOTAL_STEPS) {
       setStep(step + 1);
       return;
     }
+    setErrors([]);
+    setRunning(true);
     try {
-      setErrors([]);
-      const problems = validateInputs(inputs);
-      if (problems.length > 0) throw new SimulationInputError(problems);
-      const run = runWithRules(inputs, ctx);
-      setNotes(run.notes);
-      setResult(run.result);
-    } catch (e) {
-      setErrors(e instanceof SimulationInputError ? e.errors : ["Something went wrong running the simulation."]);
+      const res = await fetch("/api/sandbox/simulations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs, ctx, stateName }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.result) {
+        setNotes(data.notes ?? []);
+        setSimulationId(data.simulationId);
+        setPlan(data.plan === "free" ? "free" : "paid");
+        setResult(data.result);
+      } else if (data.code === "anon") {
+        setGate({ kind: "anon" });
+      } else if (data.code === "unverified") {
+        setGate({ kind: "unverified" });
+      } else if (data.code === "upgrade") {
+        setGate({ kind: "upgrade" });
+      } else {
+        setErrors([data.error || "Something went wrong running the simulation."]);
+      }
+    } catch {
+      setErrors(["Couldn't reach the server. Check your connection and try again."]);
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -80,6 +103,10 @@ export default function SandboxApp() {
     setStep(1);
   }
 
+  if (gate || access.kind !== "ready") {
+    return <AccessGate access={gate ?? access} />;
+  }
+
   if (result) {
     return (
       <div ref={topRef} className="mx-auto w-full max-w-5xl">
@@ -94,7 +121,18 @@ export default function SandboxApp() {
             setStep(TOTAL_STEPS);
           }}
           onRestart={restart}
+          simulationId={simulationId}
         />
+        {plan === "free" ? (
+          <div className="mt-10 flex flex-col gap-3 border border-gold p-5 print:hidden">
+            <p className="text-sm text-paper-white">
+              That was your free simulation. Starter and every higher package include unlimited simulations, the Scenario Lab and the AI advisor.
+            </p>
+            <Button href="/pricing" variant="primary" showArrow>
+              See packages
+            </Button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -111,6 +149,7 @@ export default function SandboxApp() {
         onNext={next}
         nextLabel={step === TOTAL_STEPS ? "Run the simulation" : "Next"}
         nextDisabled={!valid}
+        loading={running}
       >
         {step === 1 && (
           <StepBusiness

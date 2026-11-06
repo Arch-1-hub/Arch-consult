@@ -32,11 +32,12 @@ interface DashboardProps {
   stateName: string;
   notes: RuleNote[];
   ctx: RuleContext;
+  simulationId: string;
   onEdit: () => void;
   onRestart: () => void;
 }
 
-export default function Dashboard({ result, businessLabel, stateName, notes, ctx, onEdit, onRestart }: DashboardProps) {
+export default function Dashboard({ result, businessLabel, stateName, notes, ctx, simulationId, onEdit, onRestart }: DashboardProps) {
   const { summary: s, rows, signals, inputs } = result;
   const months = inputs.months;
   const verdict = buildVerdict(s, months, inputs.startingCapital);
@@ -123,7 +124,7 @@ export default function Dashboard({ result, businessLabel, stateName, notes, ctx
 
       <ScenarioLab inputs={inputs} ctx={ctx} base={result} />
 
-      <Advisor inputs={inputs} ctx={ctx} stateName={stateName} />
+      <Advisor simulationId={simulationId} />
 
       <section aria-labelledby="rules-heading" className="flex flex-col gap-4">
         <h3 id="rules-heading" className="font-display text-xl text-paper-white">

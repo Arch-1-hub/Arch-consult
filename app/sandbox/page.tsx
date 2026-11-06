@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
 import PageHero from "@/components/shared/PageHero";
 import SandboxApp from "@/components/sandbox/SandboxApp";
+import { getPageAccess } from "@/lib/sandbox/server-access";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Business Sandbox",
   description:
     "Run your business plan forward month by month before you put capital behind it. See when you break even and how long your cash lasts.",
-  // Hidden from search until access limits are added in a later stage.
+  // Hidden from search until you decide to launch it publicly.
   robots: { index: false, follow: false },
 };
 
-export default function SandboxPage() {
+export default async function SandboxPage() {
+  const access = await getPageAccess();
   return (
     <>
       <PageHero
@@ -20,7 +24,7 @@ export default function SandboxPage() {
       />
       <section className="py-16 lg:py-24">
         <div className="container-arch">
-          <SandboxApp />
+          <SandboxApp access={access} />
         </div>
       </section>
     </>

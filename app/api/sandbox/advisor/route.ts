@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prepareAdvisorRequest } from "@/lib/sandbox/advisor";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ADVISOR_QUESTION_LIMIT, prepareAdvisorRequest } from "@/lib/sandbox/advisor";
+import { isUuid } from "@/lib/sandbox/entitlement";
+import { getSandboxUser } from "@/lib/sandbox/server-access";
 import { SIMULATION_DISCLAIMER } from "@/lib/sandbox/types";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-// Simple per-IP limit. Stage 5 replaces this with per-account limits.
+// Per-IP safety net on top of the per-simulation question limit.
 const requests = new Map<string, number[]>();
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 25;
@@ -27,14 +31,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: unknown;
+    const user = await getSandboxUser();
+    if (!user || !user.verified) {
+      return NextResponse.json({ error: "Please sign in with a verified email to use the advisor.", code: "anon" }, { status: 401 });
+    }
+
+    let body: Record<string, unknown>;
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
     }
+    if (!isUuid(body?.simulationId)) {
+      return NextResponse.json({ error: "Missing simulation." }, { status: 400 });
+    }
+    const simulationId = body.simulationId as string;
 
-    const prepared = prepareAdvisorRequest(body);
+    const admin = createAdminClient();
+    const { data: sim, error: simError } = await admin
+      .from("sandbox_simulations")
+      .select("id, inputs, ctx, state_name, advisor_questions_used")
+      .eq("id", simulationId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (simError) throw simError;
+    if (!sim) {
+      return NextResponse.json({ error: "We couldn't find that simulation." }, { status: 404 });
+    }
+
+    // The numbers always come from the saved simulation, never from the browser.
+    const prepared = prepareAdvisorRequest({
+      question: body.question,
+      inputs: sim.inputs,
+      ctx: sim.ctx,
+      stateName: sim.state_name ?? "",
+      history: body.history,
+    });
     if (!prepared.ok) {
       return NextResponse.json({ error: prepared.error }, { status: prepared.status });
     }
@@ -46,13 +78,27 @@ export async function POST(req: NextRequest) {
       : groqKey
         ? { apiKey: groqKey, baseUrl: "https://api.groq.com/openai/v1/chat/completions", model: "openai/gpt-oss-120b" }
         : null;
-
     if (!provider) {
       return NextResponse.json(
         { error: "The advisor isn't configured yet in this environment.", setupRequired: true },
         { status: 503 }
       );
     }
+
+    // Count the question first, so two quick requests cannot both slip past the limit.
+    const used = await admin.rpc("sandbox_use_question", {
+      p_sim: simulationId,
+      p_user: user.id,
+      p_limit: ADVISOR_QUESTION_LIMIT,
+    });
+    if (used.error) throw used.error;
+    if (used.data === null || used.data === undefined) {
+      return NextResponse.json(
+        { error: `You have used all ${ADVISOR_QUESTION_LIMIT} advisor questions for this simulation.`, code: "limit", questionsLeft: 0 },
+        { status: 429 }
+      );
+    }
+    const refund = () => admin.rpc("sandbox_refund_question", { p_sim: simulationId, p_user: user.id });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
@@ -64,22 +110,32 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({ model: provider.model, temperature: 0.3, messages: prepared.messages }),
         signal: controller.signal,
       });
+    } catch (err) {
+      await refund();
+      throw err;
     } finally {
       clearTimeout(timer);
     }
 
     if (!aiRes.ok) {
       console.error("[sandbox-advisor] AI provider error:", await aiRes.text());
+      await refund();
       return NextResponse.json({ error: "The advisor couldn't answer right now. Please try again shortly." }, { status: 502 });
     }
 
     const data = await aiRes.json();
     const answer = data.choices?.[0]?.message?.content;
     if (typeof answer !== "string" || !answer.trim()) {
+      await refund();
       return NextResponse.json({ error: "Unexpected response. Please try again." }, { status: 502 });
     }
 
-    return NextResponse.json({ ok: true, answer: answer.trim(), disclaimer: SIMULATION_DISCLAIMER });
+    return NextResponse.json({
+      ok: true,
+      answer: answer.trim(),
+      questionsLeft: Math.max(0, ADVISOR_QUESTION_LIMIT - Number(used.data)),
+      disclaimer: SIMULATION_DISCLAIMER,
+    });
   } catch (err) {
     console.error("[sandbox-advisor] Unexpected error:", err);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
