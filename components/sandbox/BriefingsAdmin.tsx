@@ -42,6 +42,9 @@ function monthShift(month: string, by: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+const PAUSE_MS = 10000;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 async function call(body: Record<string, unknown>) {
   const res = await fetch("/api/admin/sandbox-briefings", {
     method: "POST",
@@ -77,11 +80,20 @@ export default function BriefingsAdmin({ month, briefings, lastRun }: { month: s
       for (let i = 0; i < combos.length; i++) {
         const c = combos[i];
         setProgress(`Drafting ${i + 1} of ${combos.length}: ${label(c)}`);
-        const r = await call({ action: "generate", runId: plan.runId, niche: c.niche, state: c.state });
+        let r = await call({ action: "generate", runId: plan.runId, niche: c.niche, state: c.state });
+        // The AI provider limits how fast we can ask. On a 429, wait and try again.
+        for (let attempt = 1; attempt <= 3 && !r.ok && /429/.test(String(r.error ?? "")); attempt++) {
+          for (let s = 30; s > 0; s--) {
+            setProgress(`The AI needs a short rest. Trying ${label(c)} again in ${s}s (attempt ${attempt} of 3)`);
+            await sleep(1000);
+          }
+          r = await call({ action: "generate", runId: plan.runId, niche: c.niche, state: c.state });
+        }
         if (r.ok) drafted++;
         else failed.push(`${label(c)}: ${r.error ?? "failed"}`);
         // A missing AI key will fail every briefing the same way, so stop early.
         if (r.error && /No AI key/.test(r.error)) break;
+        if (i < combos.length - 1) await sleep(PAUSE_MS);
       }
       await call({ action: "finish", runId: plan.runId, drafted, failed: failed.length });
       setFailures(failed);
