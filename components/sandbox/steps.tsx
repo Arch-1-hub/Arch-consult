@@ -15,6 +15,24 @@ export type Patch = (patch: Partial<SimulationInputs>) => void;
 const MAX_PRODUCTS = 6;
 const MAX_STAFF_ROLES = 8;
 
+const STOCK_OPTIONS = [
+  { value: "0", label: "I do not keep stock", description: "A service, or I make things only when someone orders" },
+  { value: "7", label: "About 1 week" },
+  { value: "14", label: "About 2 weeks" },
+  { value: "30", label: "About 1 month" },
+  { value: "60", label: "About 2 months" },
+  { value: "90", label: "3 months or more" },
+];
+
+/** Picks the stock choice closest to a number of days (presets hold exact day counts). */
+function nearestStock(days: number): string {
+  let best = STOCK_OPTIONS[0];
+  for (const o of STOCK_OPTIONS) {
+    if (Math.abs(Number(o.value) - days) < Math.abs(Number(best.value) - days)) best = o;
+  }
+  return best.value;
+}
+
 /* ---------- Step 1: your business ---------- */
 
 export function StepBusiness({
@@ -35,8 +53,8 @@ export function StepBusiness({
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="What are you testing?">
-        Pick the closest match. We fill the plan with example figures so you are not starting blank. They are
-        examples only, and you replace every number with your own in the next steps.
+        Pick the closest match. We fill in example numbers so you are not starting from nothing. Replace every
+        number with your own in the next steps.
       </StepHeader>
       <ChoiceCards
         legend="Type of business"
@@ -45,7 +63,7 @@ export function StepBusiness({
         options={PRESETS.map((p) => ({ value: p.id, label: p.label, description: p.description }))}
         columns={2}
       />
-      <SelectField label="Where will it operate?" value={stateName} onChange={onState} options={NIGERIAN_STATES} />
+      <SelectField label="Which state is it in?" value={stateName} onChange={onState} options={NIGERIAN_STATES} />
       <TextInput
         label="Business name (optional)"
         value={name}
@@ -62,31 +80,30 @@ export function StepMoney({ inputs, update }: { inputs: SimulationInputs; update
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="How much money are you putting in?">
-        Be exact about what you can actually commit. The simulation starts with this cash and spends it as the
-        business runs.
+        Only count money you really have. We start with this cash and spend it as your business runs.
       </StepHeader>
       <NumberField
-        label="Starting capital"
+        label="How much money are you starting with?"
         prefix="₦"
         value={inputs.startingCapital}
         onChange={(n) => update({ startingCapital: n })}
-        hint="All the cash you have available on day one."
+        hint="The cash you can actually put in on day one."
       />
       <NumberField
-        label="Setup costs before you open"
+        label="How much will you spend before you open?"
         prefix="₦"
         value={inputs.setupCosts}
         onChange={(n) => update({ setupCosts: n })}
-        hint="Equipment, fit-out, registration, licences, deposits. This comes out of your capital."
+        hint="Equipment, shop fitting, registration, licences, deposits. This comes out of your starting money."
       />
       <ChoiceCards
-        legend="How far ahead should we look?"
+        legend="How long should we test your business for?"
         value={String(inputs.months) as "12" | "24" | "36"}
         onChange={(v) => update({ months: Number(v) })}
         options={[
-          { value: "12", label: "12 months" },
-          { value: "24", label: "24 months", description: "Recommended" },
-          { value: "36", label: "36 months" },
+          { value: "12", label: "1 year" },
+          { value: "24", label: "2 years", description: "Recommended" },
+          { value: "36", label: "3 years" },
         ]}
         columns={3}
       />
@@ -103,8 +120,8 @@ export function StepOffer({ inputs, update }: { inputs: SimulationInputs; update
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="What do you sell, and for how much?">
-        Prices exclude VAT. Unit cost is what each sale costs you directly: ingredients, goods you buy to resell,
-        packaging, or the cost of delivering a service.
+        Enter prices without VAT. "What one costs you" is what you pay to make or buy one item: ingredients, goods
+        you buy to resell, packaging, or the cost of delivering a service.
       </StepHeader>
 
       {inputs.products.map((p, idx) => {
@@ -134,31 +151,42 @@ export function StepOffer({ inputs, update }: { inputs: SimulationInputs; update
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <NumberField
-                label="Selling price"
+                label="Price you charge"
                 prefix="₦"
                 value={p.unitPrice}
                 onChange={(n) => setProduct(idx, { unitPrice: n })}
               />
               <NumberField
-                label="Cost to you"
+                label="What one costs you"
                 prefix="₦"
                 value={p.unitCost}
                 onChange={(n) => setProduct(idx, { unitCost: n })}
               />
             </div>
-            <NumberField
-              label="Share of your sales"
-              value={p.mix}
-              decimal
-              onChange={(n) => setProduct(idx, { mix: n })}
-              hint="Any numbers work. If you sell 6 loaves for every 1 cake, put 6 and 1."
-            />
+            {inputs.products.length > 1 ? (
+              <NumberField
+                label="How much of your sales is this item?"
+                value={p.mix}
+                decimal
+                onChange={(n) => setProduct(idx, { mix: n })}
+                hint="Example: you sell 6 loaves for every 1 cake. Put 6 for the loaf and 1 for the cake."
+              />
+            ) : null}
             {p.unitPrice > 0 ? (
-              <p className={`text-xs ${margin <= 0 ? "text-red-400" : "text-ash"}`}>
-                {margin <= 0
-                  ? `You lose ${naira(Math.abs(margin))} on every sale at these numbers.`
-                  : `You keep ${naira(margin)} on every sale (${percent(marginPct)} margin).`}
-              </p>
+              <div className="flex flex-col gap-1 border-t border-ink-line pt-3">
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-sm text-paper-white">Profit per sale</span>
+                  <span className={`font-display text-xl ${margin <= 0 ? "text-red-400" : "text-gold-light"}`}>
+                    {margin < 0 ? "−" : ""}
+                    {naira(Math.abs(margin))}
+                  </span>
+                </div>
+                <p className={`text-xs ${margin <= 0 ? "text-red-400" : "text-ash"}`}>
+                  {margin <= 0
+                    ? "You lose money on every sale at these numbers."
+                    : `That is ${percent(marginPct)} of your selling price, before rent, staff and other running costs.`}
+                </p>
+              </div>
             ) : null}
           </div>
         );
@@ -185,53 +213,56 @@ export function StepCustomers({ inputs, update }: { inputs: SimulationInputs; up
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="Where do your customers come from, and do they stay?">
-        This is where most plans fail. Customers who leave have to be replaced, and replacing them costs money.
+        This part matters most. Customers who stop buying must be replaced, and finding new ones costs money.
       </StepHeader>
       <NumberField
-        label="Customers on opening day"
+        label="How many customers will you already have on day one?"
         value={inputs.startingCustomers}
         onChange={(n) => update({ startingCustomers: n })}
-        hint="People already waiting to buy. Use 0 if you are starting cold."
+        hint="People ready to buy from you when you open. Put 0 if you are starting from nothing."
       />
       <NumberField
-        label="New customers each month without paying for ads"
+        label="How many new customers find you each month without ads?"
         value={inputs.organicNewCustomersPerMonth}
         decimal
         onChange={(n) => update({ organicNewCustomersPerMonth: n })}
-        hint="Walk-ins, referrals, word of mouth."
+        hint="People who walk in, or come because a friend told them."
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <NumberField
-          label="Monthly marketing budget"
+          label="How much do you spend on ads and promotion each month?"
           prefix="₦"
           value={inputs.marketingBudget}
           onChange={(n) => update({ marketingBudget: n })}
         />
         <NumberField
-          label="Cost to win one customer"
+          label="How much does it cost you to get one new customer from ads?"
           prefix="₦"
           value={inputs.costPerNewCustomer}
           onChange={(n) => update({ costPerNewCustomer: n })}
-          hint="Marketing spend divided by customers it brings."
+          hint="Example: you spend ₦30,000 on ads and get 10 new customers. Put ₦3,000. Not sure? Keep the example figure."
         />
       </div>
-      <PercentField
-        label="Customers who stay from one month to the next"
-        value={inputs.monthlyRetention}
-        onChange={(f) => update({ monthlyRetention: f })}
-        hint="80% means you lose 2 in every 10 customers each month."
+      <NumberField
+        label="Out of every 10 customers, how many buy from you again next month?"
+        suffix="out of 10"
+        decimal
+        value={Math.round(inputs.monthlyRetention * 100) / 10}
+        onChange={(n) => update({ monthlyRetention: Math.min(10, Math.max(0, n)) / 10 })}
+        hint="Example: if 3 of every 10 stop coming, put 7."
       />
       <NumberField
-        label="Items each customer buys per month"
+        label="How many items does one customer buy from you in a month?"
         value={inputs.unitsPerCustomerPerMonth}
         decimal
         onChange={(n) => update({ unitsPerCustomerPerMonth: n })}
+        hint="Example: someone who buys 2 loaves a week buys about 8 in a month."
       />
       <NumberField
-        label="Most you can produce or serve in a month (optional)"
+        label="What is the most you can make or serve in one month? (optional)"
         value={inputs.maxUnitsPerMonth ?? 0}
         onChange={(n) => update({ maxUnitsPerMonth: n > 0 ? n : undefined })}
-        hint="Leave empty if you have no limit. Sales stop growing once you reach it."
+        hint="Leave empty if you can handle any number of orders. Example: an oven that makes 1,000 loaves a month."
       />
     </div>
   );
@@ -246,17 +277,17 @@ export function StepCosts({ inputs, update }: { inputs: SimulationInputs; update
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="What does it cost to keep the doors open?">
-        These costs hit every month whether or not you sell anything.
+        You pay these every month, even in a month when you sell nothing.
       </StepHeader>
 
       <div className="flex flex-col gap-4">
-        <h3 className="text-sm text-paper-white">Staff</h3>
-        {inputs.staff.length === 0 ? <p className="text-xs text-ash">No staff. It is just you.</p> : null}
+        <h3 className="text-sm text-paper-white">People you pay</h3>
+        {inputs.staff.length === 0 ? <p className="text-xs text-ash">Nobody yet. It is just you.</p> : null}
         {inputs.staff.map((s, idx) => (
           <div key={idx} className="flex flex-col gap-4 border border-ink-line bg-ink-soft p-4">
             <div className="flex items-end gap-3">
               <div className="flex-1">
-                <TextInput label="Role" value={s.role} onChange={(v) => setStaff(idx, { role: v })} placeholder="e.g. Cashier" />
+                <TextInput label="Job" value={s.role} onChange={(v) => setStaff(idx, { role: v })} placeholder="For example: cashier" />
               </div>
               <button
                 type="button"
@@ -270,7 +301,7 @@ export function StepCosts({ inputs, update }: { inputs: SimulationInputs; update
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <NumberField label="How many people" value={s.count} onChange={(n) => setStaff(idx, { count: n })} />
               <NumberField
-                label="Monthly salary each"
+                label="Salary per person, per month"
                 prefix="₦"
                 value={s.monthlySalary}
                 onChange={(n) => setStaff(idx, { monthlySalary: n })}
@@ -284,25 +315,26 @@ export function StepCosts({ inputs, update }: { inputs: SimulationInputs; update
             onClick={() => update({ staff: [...inputs.staff, { role: "", count: 1, monthlySalary: 0 }] })}
             className="flex items-center gap-2 self-start text-sm text-gold transition-colors hover:text-gold-light"
           >
-            <Plus size={16} aria-hidden="true" /> Add a role
+            <Plus size={16} aria-hidden="true" /> Add a job
           </button>
         ) : null}
       </div>
 
       <NumberField
-        label="Monthly rent"
+        label="Rent per month"
         prefix="₦"
         value={inputs.monthlyRent}
         onChange={(n) => update({ monthlyRent: n })}
+        hint="If you pay once a year, divide by 12."
       />
       <CheckboxField
-        label="My rent is paid a year ahead"
+        label="I pay my rent once a year"
         checked={inputs.rentPaidYearlyUpfront}
         onChange={(v) => update({ rentPaidYearlyUpfront: v })}
-        hint="Common in Nigeria. It shows up as a large cash drop at the start of each lease year."
+        hint="Common in Nigeria. We will show the big payment at the start of each year."
       />
       <NumberField
-        label="Power, diesel, internet and water per month"
+        label="Light, diesel, internet and water per month"
         prefix="₦"
         value={inputs.monthlyUtilities}
         onChange={(n) => update({ monthlyUtilities: n })}
@@ -312,14 +344,18 @@ export function StepCosts({ inputs, update }: { inputs: SimulationInputs; update
         prefix="₦"
         value={inputs.monthlyOtherOpex}
         onChange={(n) => update({ monthlyOtherOpex: n })}
-        hint="Transport, software, repairs, insurance, packaging not in your unit cost."
+        hint="Transport, software, repairs, insurance, and packaging not already counted above."
       />
-      <NumberField
-        label="Days of stock you keep on hand"
-        value={inputs.inventoryDays}
-        onChange={(n) => update({ inventoryDays: n })}
-        hint="Stock is cash sitting on a shelf. Use 0 if you hold none."
+      <ChoiceCards
+        legend="How long does the stock you buy usually last before you buy more?"
+        value={nearestStock(inputs.inventoryDays)}
+        onChange={(v) => update({ inventoryDays: Number(v) })}
+        options={STOCK_OPTIONS}
+        columns={2}
       />
+      <p className="-mt-3 text-xs text-ash">
+        Stock you have paid for but not yet sold is money sitting on a shelf, so this changes how much cash you have.
+      </p>
     </div>
   );
 }
@@ -347,17 +383,17 @@ export function StepReview({
   const rows: [string, string][] = [
     ["Business", businessLabel],
     ["Location", stateName],
-    ["Starting capital", naira(inputs.startingCapital)],
-    ["Setup costs", naira(inputs.setupCosts)],
-    ["Fixed costs per month", naira(fixed)],
-    ["Looking ahead", `${inputs.months} months`],
+    ["Starting money", naira(inputs.startingCapital)],
+    ["Spent before opening", naira(inputs.setupCosts)],
+    ["Costs you pay every month", naira(fixed)],
+    ["Testing for", inputs.months === 12 ? "1 year" : `${inputs.months / 12} years`],
   ];
 
   return (
     <div className="flex flex-col gap-6">
       <StepHeader title="Check your plan, then run it.">
-        The simulation runs your plan month by month. It shows when you break even, how long your cash lasts, and
-        where it breaks.
+        We will run your plan month by month. You will see when you start making a profit, how long your money lasts,
+        and where it could go wrong.
       </StepHeader>
 
       <dl className="flex flex-col border border-ink-line">
@@ -384,19 +420,19 @@ export function StepReview({
       </p>
 
       <details className="border border-ink-line">
-        <summary className="cursor-pointer px-4 py-3 text-sm text-paper-white">Economic assumptions (you can leave these)</summary>
+        <summary className="cursor-pointer px-4 py-3 text-sm text-paper-white">Price and cost changes over time (you can skip this)</summary>
         <div className="flex flex-col gap-5 border-t border-ink-line p-4">
           <PercentField
-            label="Yearly rise in your costs"
+            label="How much more do things cost you each year?"
             value={inputs.costInflationAnnual}
             onChange={(f) => update({ costInflationAnnual: f })}
-            hint="Inputs, wages, rent and power get more expensive over time."
+            hint="Ingredients, salaries, rent and diesel usually get more expensive."
           />
           <PercentField
-            label="Yearly rise in your prices"
+            label="How much do you raise your prices each year?"
             value={inputs.priceIncreaseAnnual}
             onChange={(f) => update({ priceIncreaseAnnual: f })}
-            hint="If costs rise faster than prices, your margin shrinks."
+            hint="If your costs rise faster than your prices, you keep less on each sale."
           />
         </div>
       </details>

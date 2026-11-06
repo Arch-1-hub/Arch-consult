@@ -34,10 +34,9 @@ interface DashboardProps {
   ctx: RuleContext;
   simulationId: string;
   onEdit: () => void;
-  onRestart: () => void;
 }
 
-export default function Dashboard({ result, businessLabel, stateName, notes, ctx, simulationId, onEdit, onRestart }: DashboardProps) {
+export default function Dashboard({ result, businessLabel, stateName, notes, ctx, simulationId, onEdit }: DashboardProps) {
   const { summary: s, rows, signals, inputs } = result;
   const months = inputs.months;
   const verdict = buildVerdict(s, months, inputs.startingCapital);
@@ -207,9 +206,6 @@ export default function Dashboard({ result, businessLabel, stateName, notes, ctx
           className="inline-flex items-center justify-center gap-2 border border-ink-line px-6 py-3 text-sm font-medium text-paper-white transition-colors duration-200 hover:border-gold"
         >
           <Printer size={16} aria-hidden="true" /> Save as PDF
-        </button>
-        <button type="button" onClick={onRestart} className="px-2 py-3 text-sm text-ash transition-colors hover:text-paper-white">
-          Start over
         </button>
       </div>
     </div>

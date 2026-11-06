@@ -92,17 +92,6 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
     if (step > 1) setStep(step - 1);
   }
 
-  function restart() {
-    setResult(null);
-    setErrors([]);
-    setPresetId(null);
-    setStateName("");
-    setStatus("company");
-    setNotes([]);
-    setInputs(BLANK());
-    setStep(1);
-  }
-
   if (gate || access.kind !== "ready") {
     return <AccessGate access={gate ?? access} />;
   }
@@ -120,7 +109,6 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
             setResult(null);
             setStep(TOTAL_STEPS);
           }}
-          onRestart={restart}
           simulationId={simulationId}
         />
         {plan === "free" ? (

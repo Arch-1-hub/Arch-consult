@@ -81,7 +81,7 @@ export function NumberField({
           value={text}
           placeholder={placeholder}
           onChange={(e) => handle(e.target.value)}
-          className={`${INPUT} ${prefix ? "pl-9" : "pl-4"} ${suffix ? "pr-10" : "pr-4"}`}
+          className={`${INPUT} ${prefix ? "pl-9" : "pl-4"} ${suffix ? (suffix.length > 4 ? "pr-24" : "pr-10") : "pr-4"}`}
         />
         {suffix ? (
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ash">{suffix}</span>
