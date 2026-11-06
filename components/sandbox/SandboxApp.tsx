@@ -64,7 +64,7 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
       const res = await fetch("/api/sandbox/simulations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs, ctx, stateName }),
+        body: JSON.stringify({ inputs, ctx, stateName, businessType: presetId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.result) {

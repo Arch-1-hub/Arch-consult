@@ -4,6 +4,7 @@ import { decideAccess } from "@/lib/sandbox/entitlement";
 import { validateInputs } from "@/lib/sandbox/engine";
 import { runWithRules } from "@/lib/sandbox/run";
 import { getSandboxUser, loadAccessState } from "@/lib/sandbox/server-access";
+import { PRESETS } from "@/lib/sandbox/presets";
 import { SimulationInputs } from "@/lib/sandbox/types";
 
 export const runtime = "nodejs";
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
     const ctx = { status: c.status, professionalServices: c.professionalServices } as const;
     const inputs = body.inputs as unknown as SimulationInputs;
     const stateName = typeof body.stateName === "string" ? body.stateName.slice(0, 60) : "";
+    const businessType = PRESETS.some((p) => p.id === body.businessType) ? (body.businessType as string) : null;
 
     if (!Array.isArray(inputs.products) || !Array.isArray(inputs.staff)) {
       return NextResponse.json({ error: "Missing simulation details." }, { status: 400 });
@@ -62,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await admin
       .from("sandbox_simulations")
-      .insert({ user_id: user.id, inputs, ctx, state_name: stateName, was_free: decision.plan === "free" })
+      .insert({ user_id: user.id, inputs, ctx, state_name: stateName, business_type: businessType, was_free: decision.plan === "free" })
       .select("id")
       .single();
 
