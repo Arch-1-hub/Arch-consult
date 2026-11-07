@@ -3,6 +3,8 @@ import { ENTITLING_ITEM_TYPES } from "../entitlement";
 import { decideRecipients, Recipient, SimRow } from "./audience";
 import { DeliveryStore } from "./deliver";
 import { NICHES } from "./generate";
+import { RuleContext } from "../nigeria-rules";
+import { SimulationInputs } from "../types";
 
 type Db = ReturnType<typeof createAdminClient>;
 
@@ -11,7 +13,7 @@ export async function loadRecipients(db: Db): Promise<Recipient[]> {
   const since = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
   const sims = await db
     .from("sandbox_simulations")
-    .select("user_id, business_type, state_name, created_at")
+    .select("id, user_id, business_type, state_name, created_at")
     .not("business_type", "is", null)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
@@ -78,4 +80,15 @@ export function supabaseStore(db: Db): DeliveryStore {
       await db.from("sandbox_briefing_deliveries").delete().eq("briefing_id", briefingId).in("email", emails);
     },
   };
+}
+
+/** Loads the saved answers for these simulations, keyed by simulation id. */
+export async function loadSimInputs(db: Db, simIds: string[]): Promise<Map<string, { inputs: SimulationInputs; ctx: RuleContext }>> {
+  const out = new Map<string, { inputs: SimulationInputs; ctx: RuleContext }>();
+  for (let i = 0; i < simIds.length; i += 100) {
+    const { data, error } = await db.from("sandbox_simulations").select("id, inputs, ctx").in("id", simIds.slice(i, i + 100));
+    if (error) throw error;
+    for (const r of data ?? []) out.set(String(r.id), { inputs: r.inputs as SimulationInputs, ctx: r.ctx as RuleContext });
+  }
+  return out;
 }

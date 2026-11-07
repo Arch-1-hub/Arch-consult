@@ -10,7 +10,8 @@ import { Briefing, NewsItem } from "@/lib/sandbox/briefing/types";
 import { deliverChunk, OutMessage, recipientsFor } from "@/lib/sandbox/briefing/deliver";
 import { pickBriefing, renderBriefingEmail } from "@/lib/sandbox/briefing/email";
 import { sendBatch } from "@/lib/sandbox/briefing/resend";
-import { loadRecipients, supabaseStore } from "@/lib/sandbox/briefing/server";
+import { buildPersonal, PersonalSection } from "@/lib/sandbox/briefing/personal";
+import { loadRecipients, loadSimInputs, supabaseStore } from "@/lib/sandbox/briefing/server";
 import { DEFAULT_SITE_URL, emailSecret, oneClickUrl, unsubscribeUrl } from "@/lib/sandbox/briefing/unsubscribe";
 import { monthLabel } from "@/lib/sandbox/briefing/generate";
 
@@ -180,6 +181,7 @@ export async function POST(req: NextRequest) {
       const secret = emailSecret(process.env);
       if (!secret) return err("No signing secret is available for unsubscribe links.", 503);
 
+      const personalFor = new Map<string, PersonalSection | null>();
       const build = (email: string, state: string): OutMessage => {
         const mail = renderBriefingEmail({
           briefing: row.content as Briefing,
@@ -188,6 +190,7 @@ export async function POST(req: NextRequest) {
           state: state || row.state,
           siteUrl,
           unsubscribeUrl: unsubscribeUrl(siteUrl, email, secret),
+          personal: personalFor.get(email) ?? null,
         });
         return {
           to: email,
@@ -212,6 +215,8 @@ export async function POST(req: NextRequest) {
 
       if (body.test === true) {
         if (!admin.email) return err("Your admin account has no email address.");
+        const mine = await db.from("sandbox_simulations").select("inputs, ctx").eq("user_id", admin.id).order("created_at", { ascending: false }).limit(1);
+        if (mine.data?.[0]) personalFor.set(admin.email, buildPersonal(mine.data[0].inputs, mine.data[0].ctx, row.content as Briefing));
         const res = await sendBatch({ apiKey, from, replyTo, messages: [{ ...build(admin.email, row.state), subject: `[TEST] ${build(admin.email, row.state).subject}` }] });
         return res.ok ? NextResponse.json({ ok: true, sentTo: admin.email }) : err(res.error ?? "Could not send the test.", 502);
       }
@@ -225,6 +230,13 @@ export async function POST(req: NextRequest) {
         mailer: (messages) => sendBatch({ apiKey, from, replyTo, messages }),
         build: (r) => build(r.email, stateOf.get(r.email) ?? ""),
         limit: 40,
+        prepare: async (chunk) => {
+          const sims = await loadSimInputs(db, chunk.map((r) => r.simId).filter((x): x is string => !!x));
+          for (const r of chunk) {
+            const sim = r.simId ? sims.get(r.simId) : undefined;
+            personalFor.set(r.email, sim ? buildPersonal(sim.inputs, sim.ctx, row.content as Briefing) : null);
+          }
+        },
       });
       if (result.error) return NextResponse.json({ ok: false, error: result.error, remaining: result.remaining });
       if (result.remaining === 0 && result.total > 0) {

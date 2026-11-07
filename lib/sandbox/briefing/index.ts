@@ -12,3 +12,4 @@ export { deliverChunk, recipientsFor } from "./deliver";
 export { signEmail, verifyEmailToken, unsubscribeUrl } from "./unsubscribe";
 export { sendBatch } from "./resend";
 export { emailSecret, oneClickUrl, DEFAULT_SITE_URL } from "./unsubscribe";
+export { buildPersonal, snapshotOf } from "./personal";

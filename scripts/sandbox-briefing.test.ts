@@ -10,6 +10,8 @@ import { deliverChunk, recipientsFor, OutMessage } from "../lib/sandbox/briefing
 import { pickBriefing, renderBriefingEmail } from "../lib/sandbox/briefing/email";
 import { signEmail, verifyEmailToken, unsubscribeUrl } from "../lib/sandbox/briefing/unsubscribe";
 import { sendBatch } from "../lib/sandbox/briefing/resend";
+import { buildPersonal } from "../lib/sandbox/briefing/personal";
+import { PRESETS } from "../lib/sandbox/presets";
 import { planCombos, currentMonthLagos, isMonth, MAX_STATE_COMBOS } from "../lib/sandbox/briefing/plan";
 
 let failed = 0;
@@ -241,6 +243,34 @@ const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Diesel pri
     ok(good.ok && seen.u === "https://api.resend.com/emails/batch" && JSON.parse(seen.init.body)[0].to[0] === "b@x.com", "request shape");
     const bad = await sendBatch({ apiKey: "k", from: "f", messages: [], fetchImpl: (async () => new Response("no", { status: 422 })) as any });
     ok(!bad.ok && /422/.test(bad.error ?? ""), "error reported");
+  });
+
+  const item = (title: string, text = "") => ({ title, impact: "high", whatChanged: text, whatToExpect: "", suggestedAction: "x", sourceUrls: ["https://a.com"] });
+  const bake = PRESETS.find((p) => p.id === "food-production")!.inputs;
+  const ctxC: any = { status: "company", professionalServices: false };
+  await t("personal section uses the client's own numbers and only matched topics", () => {
+    const b: any = { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Diesel price rises again"), item("Flour and sugar prices climb", "naira weaker"), item("Cricket match results")] };
+    const p = buildPersonal({ ...bake, businessName: "Ada's Bakes" }, ctxC, b)!;
+    ok(!!p && p.heading === "What this means for Ada's Bakes", "heading with business name");
+    ok(p.lines.length === 2, "two matched items, cricket ignored: " + p.lines.length);
+    ok(/^Diesel price rises again: Power and fuel cost your business about ₦/.test(p.lines[0]), "energy line: " + p.lines[0]);
+    ok(/Each 10% rise/.test(p.lines[1]) && /Flour and sugar/.test(p.lines[1]), "goods line: " + p.lines[1]);
+    const none = buildPersonal(bake, ctxC, { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Cricket match results")] } as any);
+    ok(none === null, "no match gives no section");
+  });
+  await t("personal section: different business gives different figures", () => {
+    const b: any = { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Diesel price rises")] };
+    const a = buildPersonal({ ...bake, monthlyUtilities: 100000 }, ctxC, b)!.lines[0];
+    const c = buildPersonal({ ...bake, monthlyUtilities: 400000 }, ctxC, b)!.lines[0];
+    ok(a !== c, "figures follow the client's utilities");
+  });
+  await t("personal section appears in the email, escaped", () => {
+    const m = renderBriefingEmail({
+      briefing: { headline: "H", summary: "S", items: [], seasonNotes: [], watchNext: [] } as any,
+      monthLabel: "November 2026", nicheLabel: "R", state: "", siteUrl: "https://s.com", unsubscribeUrl: "https://s.com/u",
+      personal: { heading: "What this means for <X>", lines: ["A & B"], footnote: "f" },
+    });
+    ok(m.html.includes("What this means for &lt;X&gt;") && m.html.includes("A &amp; B") && m.text.includes("- A & B"), "rendered");
   });
   console.log(failed ? `${failed} FAILED` : "ALL PASSED");
   process.exit(failed ? 1 : 0);

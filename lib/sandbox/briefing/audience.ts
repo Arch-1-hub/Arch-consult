@@ -5,9 +5,12 @@ export interface Recipient {
   email: string;
   niche: string;
   state: string;
+  /** The simulation this person's briefing is personalised from. */
+  simId?: string;
 }
 
 export interface SimRow {
+  id?: string;
   user_id: string;
   business_type: string | null;
   state_name: string | null;
@@ -44,7 +47,7 @@ export function decideRecipients(a: {
     const paid = a.paidUserIds.has(userId) || a.paidEmails.has(email) || isAllowlisted(email, a.allowlist);
     if (!paid) continue;
     seen.add(email);
-    out.push({ userId, email, niche: sim.business_type as string, state: (sim.state_name ?? "").trim() });
+    out.push({ userId, email, niche: sim.business_type as string, state: (sim.state_name ?? "").trim(), simId: sim.id });
   }
   return out;
 }

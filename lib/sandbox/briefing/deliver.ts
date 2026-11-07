@@ -39,6 +39,8 @@ export async function deliverChunk(a: {
   mailer: Mailer;
   build: (r: Recipient) => OutMessage;
   limit: number;
+  /** Called with the people about to be emailed, so per-person content can be loaded first. */
+  prepare?: (chunk: Recipient[]) => Promise<void>;
 }): Promise<ChunkResult> {
   const done = await a.store.delivered(a.briefingId);
   const todo = a.audience.filter((r) => !done.has(r.email));
@@ -49,6 +51,12 @@ export async function deliverChunk(a: {
   const mine = chunk.filter((r) => claimed.has(r.email));
   if (mine.length === 0) return { sent: 0, remaining: todo.length - chunk.length, total: a.audience.length };
 
+  try {
+    if (a.prepare) await a.prepare(mine);
+  } catch (e) {
+    await a.store.release(a.briefingId, mine.map((r) => r.email));
+    throw e;
+  }
   const res = await a.mailer(mine.map(a.build));
   if (!res.ok) {
     await a.store.release(a.briefingId, mine.map((r) => r.email));
