@@ -5,6 +5,11 @@ import { validateBriefing, extractJson } from "../lib/sandbox/briefing/validate"
 import { generateBriefing, monthLabel } from "../lib/sandbox/briefing/generate";
 import { buildBriefingMessages } from "../lib/sandbox/briefing/prompt";
 import { NewsItem } from "../lib/sandbox/briefing/types";
+import { decideRecipients } from "../lib/sandbox/briefing/audience";
+import { deliverChunk, recipientsFor, OutMessage } from "../lib/sandbox/briefing/deliver";
+import { pickBriefing, renderBriefingEmail } from "../lib/sandbox/briefing/email";
+import { signEmail, verifyEmailToken, unsubscribeUrl } from "../lib/sandbox/briefing/unsubscribe";
+import { sendBatch } from "../lib/sandbox/briefing/resend";
 import { planCombos, currentMonthLagos, isMonth, MAX_STATE_COMBOS } from "../lib/sandbox/briefing/plan";
 
 let failed = 0;
@@ -139,6 +144,103 @@ const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Diesel pri
     ok(currentMonthLagos(new Date("2026-11-30T23:30:00Z")) === "2026-12", "month rolls over at 00:30 Lagos");
     ok(currentMonthLagos(new Date("2026-11-06T10:00:00Z")) === "2026-11", "mid month");
     ok(isMonth("2026-11") && !isMonth("2026-13") && !isMonth("nov"), "isMonth");
+  });
+
+  const NICHE_SET = new Set(["restaurant", "retail-shop"]);
+  const sims = [
+    { user_id: "u1", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-01" },
+    { user_id: "u1", business_type: "retail-shop", state_name: "Oyo", created_at: "2026-11-05" },
+    { user_id: "u2", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-02" },
+    { user_id: "u3", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-02" },
+    { user_id: "u4", business_type: "restaurant", state_name: "Kano", created_at: "2026-11-02" },
+    { user_id: "u5", business_type: "restaurant", state_name: "Kano", created_at: "2026-11-02" },
+    { user_id: "u6", business_type: "nonsense", state_name: "Kano", created_at: "2026-11-02" },
+  ];
+  const users: any = {
+    u1: { email: "A@x.com", confirmed: true }, u2: { email: "b@x.com", confirmed: true }, u3: { email: "c@x.com", confirmed: false },
+    u4: { email: "d@x.com", confirmed: true }, u5: { email: "e@x.com", confirmed: true }, u6: { email: "f@x.com", confirmed: true },
+  };
+  await t("recipients: paid, verified, latest simulation, not opted out", () => {
+    const r = decideRecipients({ sims, users, paidUserIds: new Set(["u1", "u3", "u6"]), paidEmails: new Set(["d@x.com"]), allowlist: "", optouts: new Set(["e@x.com"]), validNiches: NICHE_SET });
+    const by = Object.fromEntries(r.map((x) => [x.email, x]));
+    ok(by["a@x.com"]?.niche === "retail-shop" && by["a@x.com"].state === "Oyo", "u1 uses latest sim, email lowercased");
+    ok(!by["b@x.com"], "u2 unpaid excluded");
+    ok(!by["c@x.com"], "u3 unverified excluded");
+    ok(!!by["d@x.com"], "u4 paid as guest by email");
+    ok(!by["e@x.com"], "u5 unpaid anyway");
+    ok(!by["f@x.com"], "u6 invalid niche excluded");
+    const o = decideRecipients({ sims, users, paidUserIds: new Set(["u4"]), paidEmails: new Set(), allowlist: "", optouts: new Set(["d@x.com"]), validNiches: NICHE_SET });
+    ok(o.length === 0, "opt-out excluded");
+    const al = decideRecipients({ sims, users, paidUserIds: new Set(), paidEmails: new Set(), allowlist: "b@x.com", optouts: new Set(), validNiches: NICHE_SET });
+    ok(al.length === 1 && al[0].email === "b@x.com", "allowlist counts as paid");
+  });
+  const bs = [
+    { id: "n1", niche: "restaurant", state: "", status: "approved" },
+    { id: "l1", niche: "restaurant", state: "Lagos", status: "approved" },
+    { id: "k1", niche: "restaurant", state: "Kano", status: "draft" },
+    { id: "r1", niche: "retail-shop", state: "", status: "rejected" },
+  ];
+  await t("pickBriefing: state first, then national; drafts and rejected never", () => {
+    ok(pickBriefing(bs, "restaurant", "lagos")?.id === "l1", "state match, case-insensitive");
+    ok(pickBriefing(bs, "restaurant", "Kano")?.id === "n1", "draft state falls back to national");
+    ok(pickBriefing(bs, "retail-shop", "Oyo") === null, "rejected national gives nothing");
+  });
+  await t("recipientsFor splits people between briefings", () => {
+    const rec = [
+      { userId: "1", email: "a@x.com", niche: "restaurant", state: "Lagos" },
+      { userId: "2", email: "b@x.com", niche: "restaurant", state: "Kano" },
+      { userId: "3", email: "c@x.com", niche: "retail-shop", state: "" },
+    ];
+    ok(recipientsFor("l1", bs, rec).map((r) => r.email).join() === "a@x.com", "lagos");
+    ok(recipientsFor("n1", bs, rec).map((r) => r.email).join() === "b@x.com", "national gets kano");
+    ok(recipientsFor("r1", bs, rec).length === 0, "rejected gets none");
+  });
+  await t("deliverChunk: batches, never twice, releases on failure", async () => {
+    const claimed = new Set<string>();
+    const store = {
+      delivered: async () => new Set(claimed),
+      claim: async (_: string, e: string[]) => e.filter((x) => (claimed.has(x) ? false : (claimed.add(x), true))),
+      release: async (_: string, e: string[]) => e.forEach((x) => claimed.delete(x)),
+    };
+    const aud = Array.from({ length: 5 }, (_, i) => ({ userId: "" + i, email: `p${i}@x.com`, niche: "restaurant", state: "" }));
+    const sent: string[] = [];
+    const mailer = async (m: OutMessage[]) => (m.forEach((x) => sent.push(x.to)), { ok: true });
+    const build = (r: any): OutMessage => ({ to: r.email, subject: "s", html: "h", text: "t", headers: {} });
+    const a = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 2 });
+    ok(a.sent === 2 && a.remaining === 3, "first batch " + JSON.stringify(a));
+    const b2 = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 10 });
+    ok(b2.sent === 3 && b2.remaining === 0, "rest");
+    const c = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 10 });
+    ok(c.sent === 0 && sent.length === 5 && new Set(sent).size === 5, "no repeats");
+    claimed.clear(); sent.length = 0;
+    const bad = await deliverChunk({ briefingId: "b", audience: aud, store, mailer: async () => ({ ok: false, error: "boom" }), build, limit: 10 });
+    ok(!!bad.error && claimed.size === 0, "failure releases so it can be retried");
+  });
+  await t("unsubscribe links are signed per address", () => {
+    const sec = "secret-123";
+    const tok = signEmail("A@X.com", sec);
+    ok(verifyEmailToken("a@x.com", tok, sec), "case-insensitive match");
+    ok(!verifyEmailToken("b@x.com", tok, sec), "other address rejected");
+    ok(!verifyEmailToken("a@x.com", tok, "other"), "other secret rejected");
+    ok(!verifyEmailToken("a@x.com", "x".repeat(40), sec) && !verifyEmailToken("a@x.com", "", sec) && !verifyEmailToken("a@x.com", tok, ""), "garbage rejected");
+    ok(unsubscribeUrl("https://s.com/", "a+b@x.com", sec).startsWith("https://s.com/sandbox/unsubscribe?e=a%2Bb%40x.com&t="), "url shape");
+  });
+  await t("email renders safely with unsubscribe and no unsafe links", () => {
+    const m = renderBriefingEmail({
+      briefing: { headline: "H <b>x</b>", summary: "S", items: [{ title: "T", impact: "high", whatChanged: "a", whatToExpect: "b", suggestedAction: "c", sourceUrls: ["https://ok.com/1", "javascript:alert(1)"] }], seasonNotes: [], watchNext: [] } as any,
+      monthLabel: "November 2026", nicheLabel: "Restaurant", state: "", siteUrl: "https://s.com", unsubscribeUrl: "https://s.com/u?x=1&y=2",
+    });
+    ok(!m.html.includes("<b>x</b>") && m.html.includes("&lt;b&gt;"), "escaped");
+    ok(!m.html.includes("javascript:") && !m.text.includes("javascript:"), "unsafe link dropped");
+    ok(m.html.includes("Unsubscribe") && m.text.includes("Unsubscribe: https://s.com/u"), "unsubscribe present");
+    ok(m.subject.startsWith("November 2026"), "subject");
+  });
+  await t("sendBatch posts to Resend and reports errors", async () => {
+    let seen: any;
+    const good = await sendBatch({ apiKey: "k", from: "A <a@x.com>", messages: [{ to: "b@x.com", subject: "s", html: "h", text: "t", headers: { H: "1" } }], fetchImpl: (async (u: any, init: any) => ((seen = { u, init }), new Response("{}", { status: 200 }))) as any });
+    ok(good.ok && seen.u === "https://api.resend.com/emails/batch" && JSON.parse(seen.init.body)[0].to[0] === "b@x.com", "request shape");
+    const bad = await sendBatch({ apiKey: "k", from: "f", messages: [], fetchImpl: (async () => new Response("no", { status: 422 })) as any });
+    ok(!bad.ok && /422/.test(bad.error ?? ""), "error reported");
   });
   console.log(failed ? `${failed} FAILED` : "ALL PASSED");
   process.exit(failed ? 1 : 0);

@@ -7,6 +7,12 @@ import { collectNews, FetchLike } from "@/lib/sandbox/briefing/rss";
 import { MAX_NEWS_AGE_DAYS, NEWS_FEEDS } from "@/lib/sandbox/briefing/sources";
 import { isUuid } from "@/lib/sandbox/entitlement";
 import { Briefing, NewsItem } from "@/lib/sandbox/briefing/types";
+import { deliverChunk, OutMessage, recipientsFor } from "@/lib/sandbox/briefing/deliver";
+import { pickBriefing, renderBriefingEmail } from "@/lib/sandbox/briefing/email";
+import { sendBatch } from "@/lib/sandbox/briefing/resend";
+import { loadRecipients, supabaseStore } from "@/lib/sandbox/briefing/server";
+import { DEFAULT_SITE_URL, emailSecret, oneClickUrl, unsubscribeUrl } from "@/lib/sandbox/briefing/unsubscribe";
+import { monthLabel } from "@/lib/sandbox/briefing/generate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -153,6 +159,78 @@ export async function POST(req: NextRequest) {
         if (error) throw error;
         return NextResponse.json({ ok: true });
       }
+    }
+
+    // Email: count who would receive a briefing, send a test to the admin, or send a batch.
+    if (body.action === "preview" || body.action === "send") {
+      if (!isUuid(body.id)) return err("Missing briefing.");
+      const { data: row } = await db.from("sandbox_briefings").select("id, month, niche, state, status, content").eq("id", body.id).single();
+      if (!row) return err("Briefing not found.", 404);
+      if (row.status !== "approved" && row.status !== "sent") return err("Approve this briefing before sending it.");
+
+      const { data: monthRows, error: monthError } = await db
+        .from("sandbox_briefings")
+        .select("id, niche, state, status")
+        .eq("month", row.month);
+      if (monthError) throw monthError;
+      const all = monthRows ?? [];
+      const store = supabaseStore(db);
+      const nicheLabel = NICHES.find((n) => n.id === row.niche)?.label ?? row.niche;
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL;
+      const secret = emailSecret(process.env);
+      if (!secret) return err("No signing secret is available for unsubscribe links.", 503);
+
+      const build = (email: string, state: string): OutMessage => {
+        const mail = renderBriefingEmail({
+          briefing: row.content as Briefing,
+          monthLabel: monthLabel(row.month),
+          nicheLabel,
+          state: state || row.state,
+          siteUrl,
+          unsubscribeUrl: unsubscribeUrl(siteUrl, email, secret),
+        });
+        return {
+          to: email,
+          ...mail,
+          headers: {
+            "List-Unsubscribe": `<${oneClickUrl(siteUrl, email, secret)}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+        };
+      };
+
+      if (body.action === "preview") {
+        const audience = recipientsFor(row.id, all, await loadRecipients(db));
+        const done = await store.delivered(row.id);
+        return NextResponse.json({ ok: true, total: audience.length, alreadySent: audience.filter((r) => done.has(r.email)).length });
+      }
+
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) return err("RESEND_API_KEY is not set.", 503);
+      const from = process.env.BRIEFING_FROM || "Arch Consult <no-reply@archbrandingconsult.online>";
+      const replyTo = process.env.BRIEFING_REPLY_TO || undefined;
+
+      if (body.test === true) {
+        if (!admin.email) return err("Your admin account has no email address.");
+        const res = await sendBatch({ apiKey, from, replyTo, messages: [{ ...build(admin.email, row.state), subject: `[TEST] ${build(admin.email, row.state).subject}` }] });
+        return res.ok ? NextResponse.json({ ok: true, sentTo: admin.email }) : err(res.error ?? "Could not send the test.", 502);
+      }
+
+      const audience = recipientsFor(row.id, all, await loadRecipients(db));
+      const stateOf = new Map(audience.map((r) => [r.email, r.state]));
+      const result = await deliverChunk({
+        briefingId: row.id,
+        audience,
+        store,
+        mailer: (messages) => sendBatch({ apiKey, from, replyTo, messages }),
+        build: (r) => build(r.email, stateOf.get(r.email) ?? ""),
+        limit: 40,
+      });
+      if (result.error) return NextResponse.json({ ok: false, error: result.error, remaining: result.remaining });
+      if (result.remaining === 0 && result.total > 0) {
+        await db.from("sandbox_briefings").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", row.id);
+      }
+      return NextResponse.json({ ok: true, ...result });
     }
 
     return err("Unknown action.");

@@ -114,6 +114,43 @@ export default function BriefingsAdmin({ month, briefings, lastRun }: { month: s
     router.refresh();
   }
 
+  const [mail, setMail] = useState<Record<string, string>>({});
+  const note = (id: string, text: string) => setMail((m) => ({ ...m, [id]: text }));
+
+  async function emailAction(id: string, kind: "preview" | "test" | "send") {
+    setError("");
+    if (kind === "send" && !window.confirm("Send this briefing by email to everyone it applies to? This cannot be undone.")) return;
+    setBusy(true);
+    try {
+      if (kind === "preview") {
+        const r = await call({ action: "preview", id });
+        note(id, r.ok ? `${r.total} people would get this briefing${r.alreadySent ? `, ${r.alreadySent} already sent` : ""}.` : r.error || "Could not count.");
+      } else if (kind === "test") {
+        note(id, "Sending a test to you…");
+        const r = await call({ action: "send", id, test: true });
+        note(id, r.ok ? `Test sent to ${r.sentTo}. Check your inbox and spam folder.` : r.error || "Could not send the test.");
+      } else {
+        let total = 0;
+        for (let round = 0; round < 200; round++) {
+          note(id, `Sending… ${total} sent so far`);
+          const r = await call({ action: "send", id });
+          if (!r.ok) {
+            note(id, `${total} sent, then stopped: ${r.error ?? "failed"}. Press Send again to continue; nobody gets it twice.`);
+            router.refresh();
+            return;
+          }
+          total += Number(r.sent) || 0;
+          if (!r.remaining) break;
+          await sleep(1000);
+        }
+        note(id, total === 0 ? "Nobody left to send to. Everyone it applies to already has it." : `Done. ${total} emails sent.`);
+        router.refresh();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const counts = (s: BriefingStatus) => briefings.filter((b) => b.status === s).length;
 
   return (
@@ -220,6 +257,23 @@ export default function BriefingsAdmin({ month, briefings, lastRun }: { month: s
                 <button type="button" onClick={() => review(b.id, "rejected")} disabled={b.status === "rejected"} className="border border-ink-line px-5 py-2 text-sm text-paper-white hover:border-red-400 disabled:opacity-50">
                   Reject
                 </button>
+              </div>
+            ) : null}
+
+            {b.status === "approved" || b.status === "sent" ? (
+              <div className="flex flex-col gap-2 border-t border-ink-line pt-4">
+                <div className="flex flex-wrap gap-3">
+                  <button type="button" disabled={busy} onClick={() => emailAction(b.id, "preview")} className="border border-ink-line px-4 py-2 text-xs text-paper-white hover:border-gold disabled:opacity-50">
+                    Count recipients
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => emailAction(b.id, "test")} className="border border-ink-line px-4 py-2 text-xs text-paper-white hover:border-gold disabled:opacity-50">
+                    Send me a test
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => emailAction(b.id, "send")} className="bg-gold px-4 py-2 text-xs font-medium text-ink hover:bg-gold-light disabled:opacity-50">
+                    {b.status === "sent" ? "Send to new people" : "Send to customers"}
+                  </button>
+                </div>
+                {mail[b.id] ? <p role="status" className="text-xs text-gold-light">{mail[b.id]}</p> : null}
               </div>
             ) : null}
           </li>
