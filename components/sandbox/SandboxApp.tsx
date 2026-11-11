@@ -5,6 +5,7 @@ import WizardShell from "@/components/shared/WizardShell";
 import { PageAccess, Plan } from "@/lib/sandbox/entitlement";
 import { RuleNote, TaxStatus } from "@/lib/sandbox/nigeria-rules";
 import { cloneInputs, getPreset, PRESETS } from "@/lib/sandbox/presets";
+import { BusinessProfile, emptyProfile, profileTitle } from "@/lib/sandbox/profile";
 import { isStepValid, TOTAL_STEPS } from "@/lib/sandbox/step-rules";
 import { SimulationInputs, SimulationResult } from "@/lib/sandbox/types";
 import Button from "@/components/ui/Button";
@@ -16,7 +17,7 @@ const BLANK = (): SimulationInputs => cloneInputs((getPreset("custom") ?? PRESET
 
 export default function SandboxApp({ access }: { access: PageAccess }) {
   const [step, setStep] = useState(1);
-  const [presetId, setPresetId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<BusinessProfile>(emptyProfile);
   const [stateName, setStateName] = useState("");
   const [inputs, setInputs] = useState<SimulationInputs>(BLANK);
   const [status, setStatus] = useState<TaxStatus>("company");
@@ -41,17 +42,12 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
 
   const update: Patch = (patch) => setInputs((prev) => ({ ...prev, ...patch }));
 
-  function pickPreset(id: string) {
-    const preset = getPreset(id);
-    if (!preset) return;
-    setPresetId(id);
-    setInputs((prev) => ({ ...cloneInputs(preset.inputs), businessName: prev.businessName }));
-  }
+  const updateProfile = (patch: Partial<BusinessProfile>) => setProfile((prev) => ({ ...prev, ...patch }));
 
-  const businessLabel = presetId ? getPreset(presetId)?.label ?? "Your business" : "Your business";
-  const valid = isStepValid(step, { presetId, stateName, inputs });
+  const businessLabel = profileTitle(profile, inputs.businessName);
+  const valid = isStepValid(step, { profile, stateName, inputs });
 
-  const ctx = { status, professionalServices: presetId === "professional-services" };
+  const ctx = { status, professionalServices: profile.professional };
 
   async function next() {
     if (step < TOTAL_STEPS) {
@@ -64,7 +60,7 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
       const res = await fetch("/api/sandbox/simulations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs, ctx, stateName, businessType: presetId }),
+        body: JSON.stringify({ inputs, ctx, stateName, profile }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.result) {
@@ -141,8 +137,8 @@ export default function SandboxApp({ access }: { access: PageAccess }) {
       >
         {step === 1 && (
           <StepBusiness
-            presetId={presetId}
-            onPickPreset={pickPreset}
+            profile={profile}
+            onProfile={updateProfile}
             stateName={stateName}
             onState={setStateName}
             name={inputs.businessName ?? ""}

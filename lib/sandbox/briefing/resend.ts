@@ -1,4 +1,4 @@
-import { OutMessage } from "./deliver";
+import { OutMessage } from "./dispatch";
 
 /** Sends up to 100 emails in one request through Resend's batch endpoint. */
 export async function sendBatch(args: {

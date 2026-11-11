@@ -29,6 +29,8 @@ export interface BriefingItem {
   impact: Impact;
   suggestedAction: string;
   sourceUrls: string[];
+  /** Where the news happened relative to the client: set by us, never by the AI. */
+  scope?: "area" | "state" | "national";
 }
 
 export interface Briefing {
@@ -37,6 +39,8 @@ export interface Briefing {
   items: BriefingItem[];
   seasonNotes: { title: string; when: string; note: string }[];
   watchNext: string[];
+  /** Up to three growth steps tied to the client's own simulation. */
+  growthActions?: string[];
 }
 
 export type BriefingStatus = "draft" | "approved" | "rejected" | "sent";

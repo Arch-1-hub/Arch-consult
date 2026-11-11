@@ -138,6 +138,39 @@ export function TextInput({ label, value, onChange, placeholder, hint }: TextInp
   );
 }
 
+interface TextAreaProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+  max: number;
+  rows?: number;
+}
+
+/** A multi-line box for answers in the person's own words. */
+export function TextAreaField({ label, value, onChange, placeholder, hint, max, rows = 3 }: TextAreaProps) {
+  return (
+    <label className="flex flex-col gap-2 text-sm text-paper-white">
+      <span>{label}</span>
+      <textarea
+        value={value}
+        rows={rows}
+        maxLength={max}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${INPUT} px-4 py-3 leading-relaxed`}
+      />
+      <span className="flex justify-between gap-3 text-xs text-ash">
+        <span>{hint ?? ""}</span>
+        <span>
+          {value.length}/{max}
+        </span>
+      </span>
+    </label>
+  );
+}
+
 interface ChoiceOption<T extends string> {
   value: T;
   label: string;

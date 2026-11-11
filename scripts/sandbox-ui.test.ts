@@ -1,5 +1,7 @@
 import { simulate } from "../lib/sandbox/engine";
 import { PRESETS, cloneInputs } from "../lib/sandbox/presets";
+import { emptyProfile } from "../lib/sandbox/profile";
+const PROFILE = { ...emptyProfile(), description: "I bake and sell cakes for offices", customers: "Offices in Yaba", area: "Yaba" };
 import { buildVerdict } from "../lib/sandbox/verdict";
 import { isStepValid, TOTAL_STEPS } from "../lib/sandbox/step-rules";
 import { naira, nairaCompact, percent } from "../lib/sandbox/format";
@@ -23,13 +25,13 @@ for (const p of PRESETS.filter((x) => x.id !== "custom")) {
 }
 t("custom blank preset is invalid on offer step", () => {
   const c = PRESETS.find((x) => x.id === "custom")!;
-  eq(isStepValid(3, { presetId: "custom", stateName: "Lagos", inputs: cloneInputs(c.inputs) }), false);
+  eq(isStepValid(3, { profile: PROFILE, stateName: "Lagos", inputs: cloneInputs(c.inputs) }), false);
 });
 t("step 1 needs preset and state", () => {
   const i = cloneInputs(PRESETS[0].inputs);
-  eq(isStepValid(1, { presetId: null, stateName: "Lagos", inputs: i }), false);
-  eq(isStepValid(1, { presetId: PRESETS[0].id, stateName: "", inputs: i }), false);
-  eq(isStepValid(1, { presetId: PRESETS[0].id, stateName: "Lagos", inputs: i }), true);
+  eq(isStepValid(1, { profile: emptyProfile(), stateName: "Lagos", inputs: i }), false);
+  eq(isStepValid(1, { profile: PROFILE, stateName: "", inputs: i }), false);
+  eq(isStepValid(1, { profile: PROFILE, stateName: "Lagos", inputs: i }), true);
 });
 t("loss-making plan gives critical verdict", () => {
   const i = cloneInputs(PRESETS[0].inputs);

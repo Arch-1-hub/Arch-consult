@@ -1,10 +1,11 @@
 import { validateInputs } from './engine';
+import { isProfileValid, BusinessProfile } from './profile';
 import { SimulationInputs } from './types';
 
 export const TOTAL_STEPS = 6;
 
 export interface StepContext {
-  presetId: string | null;
+  profile: BusinessProfile;
   stateName: string;
   inputs: SimulationInputs;
 }
@@ -14,7 +15,7 @@ export function isStepValid(step: number, ctx: StepContext): boolean {
   const i = ctx.inputs;
   switch (step) {
     case 1:
-      return Boolean(ctx.presetId) && ctx.stateName.trim().length > 0;
+      return isProfileValid(ctx.profile) && ctx.stateName.trim().length > 0;
     case 2:
       return i.startingCapital > 0 && [12, 24, 36].includes(i.months);
     case 3:

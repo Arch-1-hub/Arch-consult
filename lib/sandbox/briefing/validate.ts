@@ -78,6 +78,11 @@ export function validateBriefing(raw: unknown, allowedUrls: Set<string>): Valida
     .filter(Boolean)
     .slice(0, 3);
 
+  const growthActions = (Array.isArray(r.growthActions) ? r.growthActions : [])
+    .map((g) => str(g, 300))
+    .filter(Boolean)
+    .slice(0, 3);
+
   if (problems.length > 0) return { ok: false, briefing: null, dropped, problems };
-  return { ok: true, briefing: { headline, summary, items, seasonNotes, watchNext }, dropped, problems };
+  return { ok: true, briefing: { headline, summary, items, seasonNotes, watchNext, growthActions }, dropped, problems };
 }

@@ -1,20 +1,19 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ENTITLING_ITEM_TYPES } from "../entitlement";
-import { decideRecipients, Recipient, SimRow } from "./audience";
-import { DeliveryStore } from "./deliver";
-import { NICHES } from "./generate";
 import { RuleContext } from "../nigeria-rules";
+import { BusinessProfile, emptyProfile, sanitizeProfile } from "../profile";
+import { getPreset } from "../presets";
 import { SimulationInputs } from "../types";
+import { decideRecipients, Recipient, SimRow } from "./audience";
 
 type Db = ReturnType<typeof createAdminClient>;
 
-/** Everyone who should currently receive briefings. Throws if the database is not ready. */
+/** Everyone who should currently receive a briefing. Throws if the database is not ready. */
 export async function loadRecipients(db: Db): Promise<Recipient[]> {
   const since = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
   const sims = await db
     .from("sandbox_simulations")
-    .select("id, user_id, business_type, state_name, created_at")
-    .not("business_type", "is", null)
+    .select("id, user_id, state_name, created_at")
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(10000);
@@ -35,9 +34,7 @@ export async function loadRecipients(db: Db): Promise<Recipient[]> {
     if (p.customer_email) paidEmails.add(String(p.customer_email).trim().toLowerCase());
   }
 
-  const opt = await db.from("sandbox_email_optouts").select("email").limit(100000);
-  if (opt.error) throw opt.error;
-  const optouts = new Set((opt.data ?? []).map((o) => String(o.email).toLowerCase()));
+  const optouts = await loadOptouts(db);
 
   const ids = Array.from(new Set(rows.map((r) => r.user_id)));
   const users: Record<string, { email?: string | null; confirmed: boolean }> = {};
@@ -46,49 +43,44 @@ export async function loadRecipients(db: Db): Promise<Recipient[]> {
       ids.slice(i, i + 10).map(async (id) => {
         const { data } = await db.auth.admin.getUserById(id);
         if (data?.user) users[id] = { email: data.user.email, confirmed: Boolean(data.user.email_confirmed_at) };
-      })
+      }),
     );
   }
 
-  return decideRecipients({
-    sims: rows,
-    users,
-    paidUserIds,
-    paidEmails,
-    allowlist: process.env.SANDBOX_FREE_ACCESS_EMAILS,
-    optouts,
-    validNiches: new Set(NICHES.map((n) => n.id)),
-  });
+  return decideRecipients({ sims: rows, users, paidUserIds, paidEmails, allowlist: process.env.SANDBOX_FREE_ACCESS_EMAILS, optouts });
 }
 
-export function supabaseStore(db: Db): DeliveryStore {
-  return {
-    async delivered(briefingId) {
-      const { data, error } = await db.from("sandbox_briefing_deliveries").select("email").eq("briefing_id", briefingId).limit(100000);
-      if (error) throw error;
-      return new Set((data ?? []).map((d) => String(d.email)));
-    },
-    async claim(briefingId, emails) {
-      const { data, error } = await db
-        .from("sandbox_briefing_deliveries")
-        .upsert(emails.map((email) => ({ briefing_id: briefingId, email })), { onConflict: "briefing_id,email", ignoreDuplicates: true })
-        .select("email");
-      if (error) throw error;
-      return (data ?? []).map((d) => String(d.email));
-    },
-    async release(briefingId, emails) {
-      await db.from("sandbox_briefing_deliveries").delete().eq("briefing_id", briefingId).in("email", emails);
-    },
-  };
+export async function loadOptouts(db: Db): Promise<Set<string>> {
+  const opt = await db.from("sandbox_email_optouts").select("email").limit(100000);
+  if (opt.error) throw opt.error;
+  return new Set((opt.data ?? []).map((o) => String(o.email).toLowerCase()));
 }
 
-/** Loads the saved answers for these simulations, keyed by simulation id. */
-export async function loadSimInputs(db: Db, simIds: string[]): Promise<Map<string, { inputs: SimulationInputs; ctx: RuleContext }>> {
-  const out = new Map<string, { inputs: SimulationInputs; ctx: RuleContext }>();
-  for (let i = 0; i < simIds.length; i += 100) {
-    const { data, error } = await db.from("sandbox_simulations").select("id, inputs, ctx").in("id", simIds.slice(i, i + 100));
-    if (error) throw error;
-    for (const r of data ?? []) out.set(String(r.id), { inputs: r.inputs as SimulationInputs, ctx: r.ctx as RuleContext });
+export interface SimDetails {
+  inputs: SimulationInputs;
+  ctx: RuleContext;
+  state: string;
+  profile: BusinessProfile;
+}
+
+/** One saved simulation, with a usable profile even for older simulations made before the profile form existed. */
+export async function loadSim(db: Db, simId: string, userId?: string): Promise<SimDetails | null> {
+  let q = db.from("sandbox_simulations").select("inputs, ctx, state_name, profile, business_type, user_id").eq("id", simId);
+  if (userId) q = q.eq("user_id", userId);
+  const { data, error } = await q.maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  let profile = sanitizeProfile(data.profile);
+  if (!profile) {
+    const preset = data.business_type ? getPreset(String(data.business_type)) : undefined;
+    const inputs = data.inputs as SimulationInputs;
+    const names = (inputs.products ?? []).map((p) => p.name).filter(Boolean).join(", ");
+    profile = {
+      ...emptyProfile(),
+      description: preset ? `${preset.label}. ${preset.description}. ${names}`.trim() : names || "A small business",
+      customers: "Customers in my area",
+      area: "",
+    };
   }
-  return out;
+  return { inputs: data.inputs as SimulationInputs, ctx: data.ctx as RuleContext, state: String(data.state_name ?? ""), profile };
 }

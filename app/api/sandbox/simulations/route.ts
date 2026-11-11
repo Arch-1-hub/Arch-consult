@@ -4,7 +4,7 @@ import { decideAccess } from "@/lib/sandbox/entitlement";
 import { validateInputs } from "@/lib/sandbox/engine";
 import { runWithRules } from "@/lib/sandbox/run";
 import { getSandboxUser, loadAccessState } from "@/lib/sandbox/server-access";
-import { PRESETS } from "@/lib/sandbox/presets";
+import { sanitizeProfile } from "@/lib/sandbox/profile";
 import { SimulationInputs } from "@/lib/sandbox/types";
 
 export const runtime = "nodejs";
@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
     const ctx = { status: c.status, professionalServices: c.professionalServices } as const;
     const inputs = body.inputs as unknown as SimulationInputs;
     const stateName = typeof body.stateName === "string" ? body.stateName.slice(0, 60) : "";
-    const businessType = PRESETS.some((p) => p.id === body.businessType) ? (body.businessType as string) : null;
+    const profile = sanitizeProfile(body.profile);
+    if (!profile) {
+      return NextResponse.json({ error: "Please describe your business, who buys from you, and the town or area." }, { status: 400 });
+    }
 
     if (!Array.isArray(inputs.products) || !Array.isArray(inputs.staff)) {
       return NextResponse.json({ error: "Missing simulation details." }, { status: 400 });
@@ -62,11 +65,13 @@ export async function POST(req: NextRequest) {
 
     const run = runWithRules(inputs, ctx);
 
-    const { data, error } = await admin
-      .from("sandbox_simulations")
-      .insert({ user_id: user.id, inputs, ctx, state_name: stateName, business_type: businessType, was_free: decision.plan === "free" })
-      .select("id")
-      .single();
+    const row = { user_id: user.id, inputs, ctx, state_name: stateName, was_free: decision.plan === "free" };
+    let saved = await admin.from("sandbox_simulations").insert({ ...row, profile }).select("id").single();
+    // If the new "profile" column has not been added in Supabase yet, still save the simulation.
+    if (saved.error && (saved.error.code === "42703" || saved.error.code === "PGRST204")) {
+      saved = await admin.from("sandbox_simulations").insert(row).select("id").single();
+    }
+    const { data, error } = saved;
 
     if (error) {
       // 23505 = the database's one-free-simulation rule caught a second quick request.

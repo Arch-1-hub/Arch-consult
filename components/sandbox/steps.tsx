@@ -4,11 +4,11 @@ import { Plus, Trash2 } from "lucide-react";
 import { SelectField } from "@/components/shared/WizardFields";
 import { naira, percent } from "@/lib/sandbox/format";
 import { NIGERIAN_STATES } from "@/lib/sandbox/nigeria";
-import { PRESETS } from "@/lib/sandbox/presets";
+import { BusinessProfile, BusinessStage, LIMITS, STAGES } from "@/lib/sandbox/profile";
 import { monthlyFixedCosts } from "@/lib/sandbox/step-rules";
 import { TaxStatus } from "@/lib/sandbox/nigeria-rules";
 import { SimulationInputs } from "@/lib/sandbox/types";
-import { ChoiceCards, CheckboxField, NumberField, PercentField, StepHeader, TextInput } from "./fields";
+import { ChoiceCards, CheckboxField, NumberField, PercentField, StepHeader, TextAreaField, TextInput } from "./fields";
 
 export type Patch = (patch: Partial<SimulationInputs>) => void;
 
@@ -36,15 +36,15 @@ function nearestStock(days: number): string {
 /* ---------- Step 1: your business ---------- */
 
 export function StepBusiness({
-  presetId,
-  onPickPreset,
+  profile,
+  onProfile,
   stateName,
   onState,
   name,
   onName,
 }: {
-  presetId: string | null;
-  onPickPreset: (id: string) => void;
+  profile: BusinessProfile;
+  onProfile: (patch: Partial<BusinessProfile>) => void;
   stateName: string;
   onState: (s: string) => void;
   name: string;
@@ -52,24 +52,65 @@ export function StepBusiness({
 }) {
   return (
     <div className="flex flex-col gap-6">
-      <StepHeader title="What are you testing?">
-        Pick the closest match. We fill in example numbers so you are not starting from nothing. Replace every
-        number with your own in the next steps.
+      <StepHeader title="Tell us about your business or idea">
+        The more clearly you describe it, the more useful your results and your monthly briefings will be. Write it the
+        way you would explain it to a friend.
       </StepHeader>
       <ChoiceCards
-        legend="Type of business"
-        value={presetId}
-        onChange={onPickPreset}
-        options={PRESETS.map((p) => ({ value: p.id, label: p.label, description: p.description }))}
-        columns={2}
+        legend="Where are you now?"
+        value={profile.stage}
+        onChange={(v) => onProfile({ stage: v as BusinessStage })}
+        options={STAGES.map((s) => ({ value: s.value, label: s.label, description: s.description }))}
+        columns={3}
+      />
+      <TextAreaField
+        label="What does your business do, or what will it do?"
+        value={profile.description}
+        onChange={(v) => onProfile({ description: v })}
+        max={LIMITS.description}
+        placeholder="Example: I bake and sell cakes and small chops for birthdays and offices, and I deliver myself."
+        hint="What you sell, how you make or get it, and how it reaches the customer."
+        rows={4}
+      />
+      <TextAreaField
+        label="Who buys from you, and where are they?"
+        value={profile.customers}
+        onChange={(v) => onProfile({ customers: v })}
+        max={LIMITS.customers}
+        placeholder="Example: Working women and offices around Yaba and Surulere."
+        rows={3}
       />
       <SelectField label="Which state is it in?" value={stateName} onChange={onState} options={NIGERIAN_STATES} />
       <TextInput
-        label="Business name (optional)"
-        value={name}
-        onChange={onName}
-        placeholder="For your report"
+        label="Which town or area?"
+        value={profile.area}
+        onChange={(v) => onProfile({ area: v })}
+        placeholder="Example: Yaba, Ikeja GRA, Wuse 2, Trans-Amadi"
+        hint="We use this to find news that affects your part of town."
       />
+      <TextAreaField
+        label="Where do you get your materials, stock or supplies? (optional)"
+        value={profile.suppliers}
+        onChange={(v) => onProfile({ suppliers: v })}
+        max={LIMITS.suppliers}
+        placeholder="Example: Flour and sugar from Mushin market, packaging from Alaba."
+        rows={2}
+      />
+      <TextAreaField
+        label="What worries you most, or what do you want in the next 12 months? (optional)"
+        value={profile.goal}
+        onChange={(v) => onProfile({ goal: v })}
+        max={LIMITS.goal}
+        placeholder="Example: Rising flour prices. I want to open a second shop."
+        rows={2}
+      />
+      <CheckboxField
+        label="Most of what I sell is professional services"
+        hint="Law, accounting, medical, consulting and similar. This changes the small-business tax relief we apply."
+        checked={profile.professional}
+        onChange={(v) => onProfile({ professional: v })}
+      />
+      <TextInput label="Business name (optional)" value={name} onChange={onName} placeholder="For your report" />
     </div>
   );
 }

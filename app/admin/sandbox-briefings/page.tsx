@@ -13,11 +13,10 @@ export default async function SandboxBriefingsPage({ searchParams }: { searchPar
 
   const [briefings, runs] = await Promise.all([
     db
-      .from("sandbox_briefings")
-      .select("id, month, niche, state, status, content, sources, generated_at, approved_at")
+      .from("sandbox_client_briefings")
+      .select("id, month, email, title, area, state, status, content, growth, sources, created_at, approved_at")
       .eq("month", month)
-      .order("niche")
-      .order("state"),
+      .order("created_at"),
     db
       .from("sandbox_briefing_runs")
       .select("id, created_at, feed_status, items_collected, briefings_drafted, briefings_failed")
@@ -35,13 +34,13 @@ export default async function SandboxBriefingsPage({ searchParams }: { searchPar
           <p className="eyebrow">Business Sandbox</p>
           <h1 className="font-display text-3xl text-paper-white">Monthly briefings</h1>
           <p className="text-sm text-ash">
-            Collect this month&apos;s news, let the AI draft a briefing for each business type, then read, trim and approve. Nothing is
+            Collect this month&apos;s news, let the AI write a briefing for each client from their own simulation and the news in their area. Skim, trim, then approve. Nothing is
             sent to customers until you approve it.
           </p>
         </header>
         {setupProblem ? (
           <p role="alert" className="border border-red-400 p-4 text-sm text-red-400">
-            The briefing tables are not set up yet. Run supabase/012_sandbox_briefings.sql in the Supabase SQL Editor, then refresh.
+            The briefing tables are not set up yet. Run supabase/012, 013 and 014 (014_sandbox_client_briefings.sql) in the Supabase SQL Editor, then refresh.
           </p>
         ) : (
           <BriefingsAdmin month={month} briefings={briefings.data ?? []} lastRun={runs.data?.[0] ?? null} />

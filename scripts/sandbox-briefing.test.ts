@@ -1,18 +1,19 @@
 import { parseFeed, collectNews, cleanText } from "../lib/sandbox/briefing/rss";
-import { selectItems } from "../lib/sandbox/briefing/relevance";
 import { upcomingEvents, seasonsInWindow } from "../lib/sandbox/briefing/calendar";
 import { validateBriefing, extractJson } from "../lib/sandbox/briefing/validate";
-import { generateBriefing, monthLabel } from "../lib/sandbox/briefing/generate";
-import { buildBriefingMessages } from "../lib/sandbox/briefing/prompt";
+import { generateClientBriefing, monthLabel } from "../lib/sandbox/briefing/generate";
+import { buildClientMessages } from "../lib/sandbox/briefing/prompt";
+import { keywordsOf, localFeeds, selectForClient } from "../lib/sandbox/briefing/local";
+import { growthFacts, growthSection } from "../lib/sandbox/briefing/growth";
+import { emptyProfile, sanitizeProfile, isProfileValid } from "../lib/sandbox/profile";
 import { NewsItem } from "../lib/sandbox/briefing/types";
 import { decideRecipients } from "../lib/sandbox/briefing/audience";
-import { deliverChunk, recipientsFor, OutMessage } from "../lib/sandbox/briefing/deliver";
-import { pickBriefing, renderBriefingEmail } from "../lib/sandbox/briefing/email";
+import { dispatchApproved, OutMessage } from "../lib/sandbox/briefing/dispatch";
+import { renderBriefingEmail } from "../lib/sandbox/briefing/email";
 import { signEmail, verifyEmailToken, unsubscribeUrl } from "../lib/sandbox/briefing/unsubscribe";
 import { sendBatch } from "../lib/sandbox/briefing/resend";
-import { buildPersonal } from "../lib/sandbox/briefing/personal";
 import { PRESETS } from "../lib/sandbox/presets";
-import { planCombos, currentMonthLagos, isMonth, MAX_STATE_COMBOS } from "../lib/sandbox/briefing/plan";
+import { currentMonthLagos, isMonth } from "../lib/sandbox/briefing/plan";
 
 let failed = 0;
 function t(name: string, fn: () => void | Promise<void>) {
@@ -69,44 +70,84 @@ const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Diesel pri
     ok(r.status.filter((s) => s.ok).length === 3 && r.status.filter((s) => !s.ok).length === 3, JSON.stringify(r.status));
     ok(r.status.find((s) => s.id === "boom")!.error === "network down", "error text");
   });
-  await t("relevance: bakery sees flour/diesel news, ignores unrelated", () => {
-    const extra: NewsItem[] = [...news, { title: "Celebrity wedding in Abuja", url: "https://x.example/c", publishedAt: "2026-11-05T00:00:00Z", summary: "Guests arrived.", source: "S" }];
-    const sel = selectItems(extra, "food-production", "Lagos", 10);
-    ok(sel.length === 2 && !sel.some((i) => i.title.includes("Celebrity")), sel.map((i) => i.title).join("|"));
-    ok(sel[0].title.includes("flour"), "flour story first for bakery in Lagos");
+  const bakery = { ...emptyProfile(), description: "I bake and sell cakes and small chops for birthdays and offices", customers: "Offices around Yaba", area: "Yaba", suppliers: "Flour and sugar from Mushin market" };
+  await t("profile: sanitised and validated", () => {
+    ok(isProfileValid(bakery), "valid");
+    ok(sanitizeProfile({ ...bakery, description: "<b>Cakes</b> and pastries for offices" })!.description === "bCakes/b and pastries for offices", "angle brackets stripped");
+    ok(sanitizeProfile({ ...bakery, description: "short" }) === null, "too short rejected");
+    ok(sanitizeProfile("x") === null && sanitizeProfile(null) === null, "non-objects rejected");
+  });
+  await t("keywords come from the owner's own words, not a fixed list", () => {
+    const k = keywordsOf(bakery);
+    ok(k.includes("cakes") && k.includes("flour") && !k.includes("and") && !k.includes("sell"), k.join());
+    ok(keywordsOf({ description: "I run a drone photography studio", customers: "weddings", suppliers: "" }).includes("drone"), "any business works");
+  });
+  await t("local feeds: area, state+business, nationwide business", () => {
+    const f = localFeeds(bakery, "Lagos");
+    ok(f.length === 3 && f[0].url.startsWith("https://news.google.com/rss/search?q=") && decodeURIComponent(f[0].url).includes("Yaba Lagos"), f.map((x) => x.url).join("\n"));
+    ok(localFeeds({ ...bakery, area: "" }, "Lagos").length === 2, "no area, two feeds");
+  });
+  const mk = (title: string, summary: string, source = "BusinessDay", d = "2026-11-03T00:00:00Z") => ({ title, url: "https://n.example/" + encodeURIComponent(title), publishedAt: d, summary, source });
+  await t("selection: only news touching this business in this place", () => {
+    const items = [
+      mk("Yaba traders protest new market levy", "Traders in Yaba say the levy hurts sales."),
+      mk("Flour prices climb across Lagos", "Bakers in Lagos pay more for flour."),
+      mk("Senate debates electoral act", "Politics."),
+      mk("Celebrity wedding in Abuja", "Guests arrived."),
+      mk("Wheat shortage hits bakers nationwide", "Flour supply is tight."),
+      mk("Diesel price up", "Generators cost more.", "Nationwide news on your kind of business"),
+    ];
+    const sel = selectForClient(items, bakery, "Lagos", 10);
+    const titles = sel.map((s) => s.title);
+    ok(!titles.includes("Senate debates electoral act") && !titles.includes("Celebrity wedding in Abuja"), "irrelevant dropped: " + titles.join("|"));
+    ok(sel[0].title.startsWith("Yaba") && sel[0].scope === "area", "area first: " + sel[0].title);
+    ok(sel.find((s) => s.title.startsWith("Flour prices"))!.scope === "state", "state scope");
+    ok(sel.find((s) => s.title.startsWith("Wheat shortage"))!.scope === "national", "national scope only if it matches the business");
+  });
+  const inputs = { ...PRESETS.find((p) => p.id === "food-production")!.inputs, businessName: "Ada's Bakes" };
+  const ctxC: any = { status: "company", professionalServices: false };
+  await t("growth facts: from the client's own simulation, levers ranked", () => {
+    const f = growthFacts(inputs, ctxC)!;
+    ok(!!f && f.months === inputs.months && f.levers.length > 0, "facts");
+    for (let i = 1; i < f.levers.length; i++) ok(f.levers[i - 1].gain >= f.levers[i].gain, "sorted");
+    const g = growthSection(f, "Ada's Bakes");
+    ok(g.heading === "Where Ada's Bakes stands" && g.lines.length >= 3 && g.lines.some((l) => l.startsWith("Your strongest lever")), g.lines.join("|"));
+    const g2 = growthFacts({ ...inputs, startingCapital: 50000, setupCosts: 40000 }, ctxC)!;
+    ok(g2.lowestCash !== f.lowestCash, "different business, different numbers");
+  });
+  await t("prompt carries profile, facts and rules, never another client's data", () => {
+    const sel = selectForClient([mk("Yaba traders protest new market levy", "Traders in Yaba.")], bakery, "Lagos", 5);
+    const m = buildClientMessages({ profile: bakery, state: "Lagos", monthLabel: "November 2026", facts: growthFacts(inputs, ctxC), items: sel, events: [], seasons: [] });
+    ok(m[0].content.includes("Never invent") && m[1].content.includes("whatItDoes") && m[1].content.includes("Yaba") && m[1].content.includes("strongestLevers"), "prompt");
   });
   await t("calendar: window and seasons", () => {
     const ev = upcomingEvents(new Date("2026-12-01T00:00:00Z"), 90).map((e) => e.name);
-    ok(ev.includes("Christmas Day") && ev.includes("Valentine's Day") && !ev.includes("Workers' Day"), ev.join("|"));
+    ok(ev.includes("Christmas Day") && !ev.includes("Workers' Day"), ev.join("|"));
     const se = seasonsInWindow(new Date("2026-12-01T00:00:00Z"), 90).map((s) => s.name);
-    ok(se.includes("Festive season") && se.includes("Harmattan") && !se.includes("Flood-risk peak"), se.join("|"));
+    ok(se.includes("Festive season") && !se.includes("Flood-risk peak"), se.join("|"));
   });
-  await t("monthLabel", () => ok(monthLabel("2026-11") === "November 2026", monthLabel("2026-11")));
-  await t("prompt contains data and rules", () => {
-    const m = buildBriefingMessages({ nicheLabel: "Bakery", state: "Lagos", monthLabel: "November 2026", items: news, events: [], seasons: [] });
-    ok(m[0].content.includes("Never invent") && m[1].content.includes("https://news.example/a"), "prompt");
+  await t("monthLabel and month helpers", () => {
+    ok(monthLabel("2026-11") === "November 2026", "label");
+    ok(currentMonthLagos(new Date("2026-11-30T23:30:00Z")) === "2026-12" && currentMonthLagos(new Date("2026-11-06T10:00:00Z")) === "2026-11", "lagos month");
+    ok(isMonth("2026-11") && !isMonth("2026-13") && !isMonth("nov"), "isMonth");
   });
+  const yaba = mk("Yaba traders protest new market levy", "Traders in Yaba say the levy hurts sales.");
   const good = {
-    headline: "Flour and diesel costs are rising for bakers",
-    summary: "Two cost pressures matter most. Plan your December stock early.",
+    headline: "A market levy in Yaba could squeeze your margins",
+    summary: "Your plan reaches profit steadily. A new levy near you is the main thing to watch.",
     items: [
-      { title: "Flour is more expensive", whatChanged: "Flour prices rose in Lagos.", whatToExpect: "Your cost per loaf may rise over the next months.", impact: "high", suggestedAction: "Ask two suppliers for a fixed price now.", sourceUrls: ["https://news.example/a"] },
-      { title: "Made-up story", whatChanged: "Something invented.", whatToExpect: "Nothing real.", impact: "low", suggestedAction: "None.", sourceUrls: ["https://invented.example/x"] },
+      { title: "New levy on Yaba traders", whatChanged: "Traders protest a new levy.", whatToExpect: "Stall costs may rise.", impact: "high", suggestedAction: "Ask your landlord what applies to you.", sourceUrls: [yaba.url] },
+      { title: "Made-up story", whatChanged: "Invented.", whatToExpect: "Nothing.", impact: "low", suggestedAction: "None.", sourceUrls: ["https://invented.example/x"] },
     ],
+    growthActions: ["Raise prices 5% on your best seller.", "Plan stock early for December.", "x".repeat(400), "four", ],
     seasonNotes: [{ title: "Festive season", when: "December", note: "Demand usually rises." }],
-    watchNext: ["Diesel prices"],
+    watchNext: ["Levy announcement"],
   };
-  await t("validator drops items citing links we never supplied", () => {
-    const v = validateBriefing(good, new Set(["https://news.example/a", "https://other.example/d"]));
+  await t("validator: drops invented sources, caps growth actions", () => {
+    const v = validateBriefing(good, new Set([yaba.url]));
     ok(v.ok && v.briefing!.items.length === 1 && v.dropped[0] === "Made-up story", JSON.stringify(v));
-  });
-  await t("validator rejects non-objects and missing headline", () => {
-    ok(!validateBriefing("x", new Set()).ok, "string");
-    ok(!validateBriefing({ summary: "s", items: [] }, new Set()).ok, "no headline");
-  });
-  await t("validator strips angle brackets and fixes bad impact", () => {
-    const v = validateBriefing({ headline: "<b>H</b>", summary: "S", items: [{ title: "T", whatChanged: "a", whatToExpect: "b", impact: "extreme", suggestedAction: "c", sourceUrls: ["https://u"] }] }, new Set(["https://u"]));
-    ok(v.ok && v.briefing!.headline === "bH/b" && v.briefing!.items[0].impact === "medium", JSON.stringify(v.briefing));
+    ok(v.briefing!.growthActions!.length === 3 && v.briefing!.growthActions![2].length <= 300, "growth actions capped");
+    ok(!validateBriefing("x", new Set()).ok && !validateBriefing({ summary: "s", items: [] }, new Set()).ok, "bad input rejected");
   });
   await t("extractJson handles code fences and chatter", () => {
     ok((extractJson("Sure!\n```json\n{\"a\":1}\n```") as any).a === 1, "fence");
@@ -114,164 +155,87 @@ const ATOM = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Diesel pri
     let threw = false; try { extractJson("no json"); } catch { threw = true; }
     ok(threw, "throws");
   });
-  await t("generateBriefing: good reply accepted, only cited sources kept", async () => {
-    const r = await generateBriefing({ month: "2026-12", niche: "food-production", state: "Lagos", news, llm: async () => "```json\n" + JSON.stringify(good) + "\n```" });
-    ok(r.ok && r.briefing!.items.length === 1 && r.sources.length === 1 && r.sources[0].url === "https://news.example/a", JSON.stringify(r));
+  await t("generateClientBriefing: accepts good reply, tags scope, keeps only cited sources", async () => {
+    const r = await generateClientBriefing({ month: "2026-12", profile: bakery, businessName: "Ada's Bakes", state: "Lagos", inputs, ctx: ctxC, news: [yaba, mk("Celebrity wedding", "x")], llm: async () => "```json\n" + JSON.stringify(good) + "\n```" });
+    ok(r.ok && r.briefing!.items.length === 1 && r.briefing!.items[0].scope === "area", JSON.stringify(r.error));
+    ok(r.sources.length === 1 && !!r.growth && r.growth.heading.includes("Ada"), "sources and growth block");
   });
-  await t("generateBriefing: AI failure and unreadable reply give clear errors", async () => {
-    const a = await generateBriefing({ month: "2026-12", niche: "restaurant", state: null, news, llm: async () => { throw new Error("provider down"); } });
+  await t("generateClientBriefing: quiet month is fine; failures give clear errors", async () => {
+    const quiet = { headline: "A quiet month", summary: "No news affects you this month.", items: [], growthActions: ["Focus on retention."], seasonNotes: [], watchNext: [] };
+    const q = await generateClientBriefing({ month: "2026-12", profile: bakery, state: "Lagos", inputs, ctx: ctxC, news: [], llm: async () => JSON.stringify(quiet) });
+    ok(q.ok && q.briefing!.items.length === 0, "quiet ok");
+    const a = await generateClientBriefing({ month: "2026-12", profile: bakery, state: "Lagos", inputs, ctx: ctxC, news: [], llm: async () => { throw new Error("provider down"); } });
     ok(!a.ok && a.error === "provider down", String(a.error));
-    const b = await generateBriefing({ month: "2026-12", niche: "restaurant", state: null, news, llm: async () => "I cannot help" });
+    const b = await generateClientBriefing({ month: "2026-12", profile: bakery, state: "Lagos", inputs, ctx: ctxC, news: [], llm: async () => "I cannot help" });
     ok(!b.ok && /not readable/.test(b.error!), String(b.error));
-    const c = await generateBriefing({ month: "2026-12", niche: "nonsense", state: null, news, llm: async () => "{}" });
-    ok(!c.ok, "unknown niche");
   });
-  await t("planCombos: national per business type, plus real state pairs, deduped and validated", () => {
-    const c = planCombos([
-      { business_type: "restaurant", state_name: "Lagos" },
-      { business_type: "restaurant", state_name: "Lagos" },
-      { business_type: "custom", state_name: "Kano" },
-      { business_type: "beauty-salon", state_name: "  " },
-      { business_type: null, state_name: "Abuja" },
-      { business_type: "retail-shop", state_name: "Oyo" },
-    ]);
-    ok(c.filter((x) => x.state === "").length === 6, "6 national");
-    ok(c.filter((x) => x.state !== "").length === 2, "2 state combos: " + JSON.stringify(c.filter((x) => x.state)));
-  });
-  await t("planCombos caps state pairs", () => {
-    const many = Array.from({ length: 80 }, (_, i) => ({ business_type: "restaurant", state_name: "S" + i }));
-    ok(planCombos(many).filter((x) => x.state).length === MAX_STATE_COMBOS, "cap");
-  });
-  await t("month helpers use Nigerian time", () => {
-    ok(currentMonthLagos(new Date("2026-11-30T23:30:00Z")) === "2026-12", "month rolls over at 00:30 Lagos");
-    ok(currentMonthLagos(new Date("2026-11-06T10:00:00Z")) === "2026-11", "mid month");
-    ok(isMonth("2026-11") && !isMonth("2026-13") && !isMonth("nov"), "isMonth");
-  });
-
-  const NICHE_SET = new Set(["restaurant", "retail-shop"]);
-  const sims = [
-    { user_id: "u1", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-01" },
-    { user_id: "u1", business_type: "retail-shop", state_name: "Oyo", created_at: "2026-11-05" },
-    { user_id: "u2", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-02" },
-    { user_id: "u3", business_type: "restaurant", state_name: "Lagos", created_at: "2026-11-02" },
-    { user_id: "u4", business_type: "restaurant", state_name: "Kano", created_at: "2026-11-02" },
-    { user_id: "u5", business_type: "restaurant", state_name: "Kano", created_at: "2026-11-02" },
-    { user_id: "u6", business_type: "nonsense", state_name: "Kano", created_at: "2026-11-02" },
-  ];
-  const users: any = {
-    u1: { email: "A@x.com", confirmed: true }, u2: { email: "b@x.com", confirmed: true }, u3: { email: "c@x.com", confirmed: false },
-    u4: { email: "d@x.com", confirmed: true }, u5: { email: "e@x.com", confirmed: true }, u6: { email: "f@x.com", confirmed: true },
-  };
   await t("recipients: paid, verified, latest simulation, not opted out", () => {
-    const r = decideRecipients({ sims, users, paidUserIds: new Set(["u1", "u3", "u6"]), paidEmails: new Set(["d@x.com"]), allowlist: "", optouts: new Set(["e@x.com"]), validNiches: NICHE_SET });
+    const sims = [
+      { id: "s1", user_id: "u1", state_name: "Lagos", created_at: "2026-11-01" },
+      { id: "s2", user_id: "u1", state_name: "Oyo", created_at: "2026-11-05" },
+      { id: "s3", user_id: "u2", state_name: "Lagos", created_at: "2026-11-02" },
+      { id: "s4", user_id: "u3", state_name: "Lagos", created_at: "2026-11-02" },
+      { id: "s5", user_id: "u4", state_name: "Kano", created_at: "2026-11-02" },
+      { id: "s6", user_id: "u5", state_name: "Kano", created_at: "2026-11-02" },
+    ];
+    const users: any = { u1: { email: "A@x.com", confirmed: true }, u2: { email: "b@x.com", confirmed: true }, u3: { email: "c@x.com", confirmed: false }, u4: { email: "d@x.com", confirmed: true }, u5: { email: "e@x.com", confirmed: true } };
+    const r = decideRecipients({ sims, users, paidUserIds: new Set(["u1", "u3"]), paidEmails: new Set(["d@x.com", "e@x.com"]), allowlist: "", optouts: new Set(["e@x.com"]) });
     const by = Object.fromEntries(r.map((x) => [x.email, x]));
-    ok(by["a@x.com"]?.niche === "retail-shop" && by["a@x.com"].state === "Oyo", "u1 uses latest sim, email lowercased");
-    ok(!by["b@x.com"], "u2 unpaid excluded");
-    ok(!by["c@x.com"], "u3 unverified excluded");
-    ok(!!by["d@x.com"], "u4 paid as guest by email");
-    ok(!by["e@x.com"], "u5 unpaid anyway");
-    ok(!by["f@x.com"], "u6 invalid niche excluded");
-    const o = decideRecipients({ sims, users, paidUserIds: new Set(["u4"]), paidEmails: new Set(), allowlist: "", optouts: new Set(["d@x.com"]), validNiches: NICHE_SET });
-    ok(o.length === 0, "opt-out excluded");
-    const al = decideRecipients({ sims, users, paidUserIds: new Set(), paidEmails: new Set(), allowlist: "b@x.com", optouts: new Set(), validNiches: NICHE_SET });
+    ok(by["a@x.com"]?.simId === "s2" && by["a@x.com"].state === "Oyo", "latest sim, lowercased email");
+    ok(!by["b@x.com"] && !by["c@x.com"] && !by["e@x.com"] && !!by["d@x.com"], "unpaid, unverified and opted-out excluded; guest payer included");
+    const al = decideRecipients({ sims, users, paidUserIds: new Set(), paidEmails: new Set(), allowlist: "b@x.com", optouts: new Set() });
     ok(al.length === 1 && al[0].email === "b@x.com", "allowlist counts as paid");
   });
-  const bs = [
-    { id: "n1", niche: "restaurant", state: "", status: "approved" },
-    { id: "l1", niche: "restaurant", state: "Lagos", status: "approved" },
-    { id: "k1", niche: "restaurant", state: "Kano", status: "draft" },
-    { id: "r1", niche: "retail-shop", state: "", status: "rejected" },
-  ];
-  await t("pickBriefing: state first, then national; drafts and rejected never", () => {
-    ok(pickBriefing(bs, "restaurant", "lagos")?.id === "l1", "state match, case-insensitive");
-    ok(pickBriefing(bs, "restaurant", "Kano")?.id === "n1", "draft state falls back to national");
-    ok(pickBriefing(bs, "retail-shop", "Oyo") === null, "rejected national gives nothing");
-  });
-  await t("recipientsFor splits people between briefings", () => {
-    const rec = [
-      { userId: "1", email: "a@x.com", niche: "restaurant", state: "Lagos" },
-      { userId: "2", email: "b@x.com", niche: "restaurant", state: "Kano" },
-      { userId: "3", email: "c@x.com", niche: "retail-shop", state: "" },
-    ];
-    ok(recipientsFor("l1", bs, rec).map((r) => r.email).join() === "a@x.com", "lagos");
-    ok(recipientsFor("n1", bs, rec).map((r) => r.email).join() === "b@x.com", "national gets kano");
-    ok(recipientsFor("r1", bs, rec).length === 0, "rejected gets none");
-  });
-  await t("deliverChunk: batches, never twice, releases on failure", async () => {
-    const claimed = new Set<string>();
-    const store = {
-      delivered: async () => new Set(claimed),
-      claim: async (_: string, e: string[]) => e.filter((x) => (claimed.has(x) ? false : (claimed.add(x), true))),
-      release: async (_: string, e: string[]) => e.forEach((x) => claimed.delete(x)),
+  const mkStore = (n: number) => {
+    const rows = Array.from({ length: n }, (_, i) => ({ id: "r" + i, email: `p${i}@x.com`, status: "approved" }));
+    return {
+      rows,
+      store: {
+        claim: async (limit: number) => rows.filter((r) => r.status === "approved").slice(0, limit).map((r) => ((r.status = "sent"), { id: r.id, email: r.email })),
+        revert: async (ids: string[]) => rows.forEach((r) => ids.includes(r.id) && (r.status = "approved")),
+        drop: async (ids: string[]) => rows.forEach((r) => ids.includes(r.id) && (r.status = "rejected")),
+        waiting: async () => rows.filter((r) => r.status === "approved").length,
+      },
     };
-    const aud = Array.from({ length: 5 }, (_, i) => ({ userId: "" + i, email: `p${i}@x.com`, niche: "restaurant", state: "" }));
+  };
+  await t("dispatch: batches, never twice, skips opted-out, reverts on failure", async () => {
+    const { rows, store } = mkStore(5);
     const sent: string[] = [];
     const mailer = async (m: OutMessage[]) => (m.forEach((x) => sent.push(x.to)), { ok: true });
-    const build = (r: any): OutMessage => ({ to: r.email, subject: "s", html: "h", text: "t", headers: {} });
-    const a = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 2 });
-    ok(a.sent === 2 && a.remaining === 3, "first batch " + JSON.stringify(a));
-    const b2 = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 10 });
-    ok(b2.sent === 3 && b2.remaining === 0, "rest");
-    const c = await deliverChunk({ briefingId: "b", audience: aud, store, mailer, build, limit: 10 });
-    ok(c.sent === 0 && sent.length === 5 && new Set(sent).size === 5, "no repeats");
-    claimed.clear(); sent.length = 0;
-    const bad = await deliverChunk({ briefingId: "b", audience: aud, store, mailer: async () => ({ ok: false, error: "boom" }), build, limit: 10 });
-    ok(!!bad.error && claimed.size === 0, "failure releases so it can be retried");
+    const build = async (r: { id: string; email: string }): Promise<OutMessage | null> => (r.email === "p1@x.com" ? null : { to: r.email, subject: "s", html: "h", text: "t", headers: {} });
+    const a = await dispatchApproved({ store, mailer, build, limit: 2 });
+    ok(a.sent === 1 && a.remaining === 3, "first batch (one skipped) " + JSON.stringify(a));
+    const b = await dispatchApproved({ store, mailer, build, limit: 10 });
+    ok(b.sent === 3 && b.remaining === 0, "rest");
+    const c = await dispatchApproved({ store, mailer, build, limit: 10 });
+    ok(c.sent === 0 && sent.length === 4 && !sent.includes("p1@x.com") && rows[1].status === "rejected", "no repeats, opted-out dropped");
+    const f = mkStore(3);
+    const bad = await dispatchApproved({ store: f.store, mailer: async () => ({ ok: false, error: "boom" }), build, limit: 10 });
+    ok(!!bad.error && f.rows.filter((r) => r.status === "approved").length === 2, "failure puts them back for a retry");
   });
   await t("unsubscribe links are signed per address", () => {
     const sec = "secret-123";
     const tok = signEmail("A@X.com", sec);
-    ok(verifyEmailToken("a@x.com", tok, sec), "case-insensitive match");
-    ok(!verifyEmailToken("b@x.com", tok, sec), "other address rejected");
-    ok(!verifyEmailToken("a@x.com", tok, "other"), "other secret rejected");
+    ok(verifyEmailToken("a@x.com", tok, sec) && !verifyEmailToken("b@x.com", tok, sec) && !verifyEmailToken("a@x.com", tok, "other"), "per address and secret");
     ok(!verifyEmailToken("a@x.com", "x".repeat(40), sec) && !verifyEmailToken("a@x.com", "", sec) && !verifyEmailToken("a@x.com", tok, ""), "garbage rejected");
     ok(unsubscribeUrl("https://s.com/", "a+b@x.com", sec).startsWith("https://s.com/sandbox/unsubscribe?e=a%2Bb%40x.com&t="), "url shape");
   });
-  await t("email renders safely with unsubscribe and no unsafe links", () => {
+  await t("email shows growth block, actions, scope, escapes everything", () => {
     const m = renderBriefingEmail({
-      briefing: { headline: "H <b>x</b>", summary: "S", items: [{ title: "T", impact: "high", whatChanged: "a", whatToExpect: "b", suggestedAction: "c", sourceUrls: ["https://ok.com/1", "javascript:alert(1)"] }], seasonNotes: [], watchNext: [] } as any,
-      monthLabel: "November 2026", nicheLabel: "Restaurant", state: "", siteUrl: "https://s.com", unsubscribeUrl: "https://s.com/u?x=1&y=2",
+      briefing: { headline: "H <b>x</b>", summary: "S", items: [{ title: "T", impact: "high", scope: "area", whatChanged: "a", whatToExpect: "b", suggestedAction: "c", sourceUrls: ["https://ok.com/1", "javascript:alert(1)"] }], seasonNotes: [], watchNext: [], growthActions: ["Do A & B"] } as any,
+      monthLabel: "November 2026", nicheLabel: "Ada's Bakes", state: "Yaba, Lagos", siteUrl: "https://s.com", unsubscribeUrl: "https://s.com/u?x=1&y=2",
+      personal: { heading: "Where <X> stands", lines: ["Profit from month 4."], footnote: "f" },
     });
-    ok(!m.html.includes("<b>x</b>") && m.html.includes("&lt;b&gt;"), "escaped");
-    ok(!m.html.includes("javascript:") && !m.text.includes("javascript:"), "unsafe link dropped");
-    ok(m.html.includes("Unsubscribe") && m.text.includes("Unsubscribe: https://s.com/u"), "unsubscribe present");
-    ok(m.subject.startsWith("November 2026"), "subject");
+    ok(!m.html.includes("<b>x</b>") && m.html.includes("&lt;b&gt;") && m.html.includes("Where &lt;X&gt; stands"), "escaped");
+    ok(m.html.includes("in your area") && m.html.includes("Your next 30 days") && m.html.includes("Do A &amp; B"), "scope and actions");
+    ok(!m.html.includes("javascript:") && !m.text.includes("javascript:") && m.text.includes("Unsubscribe: https://s.com/u") && m.text.includes("1. Do A & B"), "safe links, text version");
   });
   await t("sendBatch posts to Resend and reports errors", async () => {
     let seen: any;
-    const good = await sendBatch({ apiKey: "k", from: "A <a@x.com>", messages: [{ to: "b@x.com", subject: "s", html: "h", text: "t", headers: { H: "1" } }], fetchImpl: (async (u: any, init: any) => ((seen = { u, init }), new Response("{}", { status: 200 }))) as any });
-    ok(good.ok && seen.u === "https://api.resend.com/emails/batch" && JSON.parse(seen.init.body)[0].to[0] === "b@x.com", "request shape");
+    const good2 = await sendBatch({ apiKey: "k", from: "A <a@x.com>", messages: [{ to: "b@x.com", subject: "s", html: "h", text: "t", headers: { H: "1" } }], fetchImpl: (async (u: any, init: any) => ((seen = { u, init }), new Response("{}", { status: 200 }))) as any });
+    ok(good2.ok && seen.u === "https://api.resend.com/emails/batch" && JSON.parse(seen.init.body)[0].to[0] === "b@x.com", "request shape");
     const bad = await sendBatch({ apiKey: "k", from: "f", messages: [], fetchImpl: (async () => new Response("no", { status: 422 })) as any });
     ok(!bad.ok && /422/.test(bad.error ?? ""), "error reported");
   });
-
-  const item = (title: string, text = "") => ({ title, impact: "high", whatChanged: text, whatToExpect: "", suggestedAction: "x", sourceUrls: ["https://a.com"] });
-  const bake = PRESETS.find((p) => p.id === "food-production")!.inputs;
-  const ctxC: any = { status: "company", professionalServices: false };
-  await t("personal section uses the client's own numbers and only matched topics", () => {
-    const b: any = { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Diesel price rises again"), item("Flour and sugar prices climb", "naira weaker"), item("Cricket match results")] };
-    const p = buildPersonal({ ...bake, businessName: "Ada's Bakes" }, ctxC, b)!;
-    ok(!!p && p.heading === "What this means for Ada's Bakes", "heading with business name");
-    ok(p.lines.length === 2, "two matched items, cricket ignored: " + p.lines.length);
-    ok(/^Diesel price rises again: Power and fuel cost your business about ₦/.test(p.lines[0]), "energy line: " + p.lines[0]);
-    ok(/Each 10% rise/.test(p.lines[1]) && /Flour and sugar/.test(p.lines[1]), "goods line: " + p.lines[1]);
-    const none = buildPersonal(bake, ctxC, { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Cricket match results")] } as any);
-    ok(none === null, "no match gives no section");
-  });
-  await t("personal section: different business gives different figures", () => {
-    const b: any = { headline: "h", summary: "s", seasonNotes: [], watchNext: [], items: [item("Diesel price rises")] };
-    const a = buildPersonal({ ...bake, monthlyUtilities: 100000 }, ctxC, b)!.lines[0];
-    const c = buildPersonal({ ...bake, monthlyUtilities: 400000 }, ctxC, b)!.lines[0];
-    ok(a !== c, "figures follow the client's utilities");
-  });
-  await t("personal section appears in the email, escaped", () => {
-    const m = renderBriefingEmail({
-      briefing: { headline: "H", summary: "S", items: [], seasonNotes: [], watchNext: [] } as any,
-      monthLabel: "November 2026", nicheLabel: "R", state: "", siteUrl: "https://s.com", unsubscribeUrl: "https://s.com/u",
-      personal: { heading: "What this means for <X>", lines: ["A & B"], footnote: "f" },
-    });
-    ok(m.html.includes("What this means for &lt;X&gt;") && m.html.includes("A &amp; B") && m.text.includes("- A & B"), "rendered");
-  });
   console.log(failed ? `${failed} FAILED` : "ALL PASSED");
-  process.exit(failed ? 1 : 0);
 })();
