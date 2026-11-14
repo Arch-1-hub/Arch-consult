@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { services, blogPosts } from "@/lib/constants";
 import { aiTools } from "@/lib/ai-tools-data";
 
-const base = "https://archconsult.com";
+const base = "https://archbrandingconsult.online";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes = [
@@ -12,6 +12,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/ai-consultant",
     "/health-check",
     "/launch-wizard",
+    "/sandbox",
     "/pricing",
     "/blog",
     "/contact",

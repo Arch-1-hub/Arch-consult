@@ -6,9 +6,9 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/dashboard", "/admin", "/api", "/account"],
+        disallow: ["/dashboard", "/admin", "/api", "/account", "/sandbox/unsubscribe"],
       },
     ],
-    sitemap: "https://archconsult.com/sitemap.xml",
+    sitemap: "https://archbrandingconsult.online/sitemap.xml",
   };
 }
