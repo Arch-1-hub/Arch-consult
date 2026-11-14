@@ -190,8 +190,8 @@ export default function Dashboard({ result, businessLabel, stateName, notes, ctx
       <p className="border-t border-ink-line pt-6 text-xs leading-relaxed text-ash">{result.disclaimer}</p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap print:hidden">
-        <Button href="/book-consultation" variant="primary" size="lg" showArrow>
-          Talk this through with a consultant
+        <Button href={`/book-consultation?sim=${encodeURIComponent(simulationId)}`} variant="primary" size="lg" showArrow>
+          Talk to a consultant about these numbers
         </Button>
         <button
           type="button"
